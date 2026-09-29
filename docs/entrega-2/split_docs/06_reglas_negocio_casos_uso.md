@@ -29,7 +29,18 @@ A continuación se listan los Casos de Uso más representativos del sistema:
 
 ### CU-04: Ejecutar Labor (Validación Climática)
 *   **Actor:** Operario / Agrónomo.
-*   **Descripción:** El actor marca una labor programada como iniciada. El sistema consulta la API climática, aplica las Reglas de Negocio (RN-01) y, si se aprueba, descuenta el stock físico (RN-03) y comienza a contabilizar las horas de máquina.
+*   **Precondiciones:** El usuario debe estar autenticado con rol válido. La labor debe estar en estado `PLANIFICADA`. Debe existir stock físico suficiente de los insumos requeridos.
+*   **Flujo Principal:**
+    1. El actor selecciona una labor planificada en la interfaz y presiona "Iniciar Ejecución".
+    2. El sistema obtiene las coordenadas geográficas del lote asociado a la labor.
+    3. El sistema backend consulta la API Climática externa pasándole las coordenadas.
+    4. El sistema evalúa las variables devueltas (viento, temperatura, humedad, probabilidad de lluvia) contra la tabla `regla_climatica` correspondiente al `tipo_labor`.
+    5. Al ser óptimo el clima, el sistema aprueba la ejecución y descuenta el inventario físico registrando un `EGRESO_LABOR` en `movimiento_stock`.
+    6. El sistema cambia el estado de la labor a `EN_EJECUCION`, guardando los datos climáticos registrados.
+    7. El sistema muestra un mensaje de éxito al usuario.
+*   **Flujos Alternativos:**
+    *   *4a. Clima Adverso:* Si una o más variables superan los umbrales permitidos, el sistema aborta el inicio, cambia el estado de la labor a `BLOQUEADA_CLIMA`, no descuenta stock, y emite una alerta transversal al usuario.
+    *   *Precondición Fallida (Stock Insuficiente):* Si no hay insumos, el sistema rechaza la acción indicando la cantidad faltante para realizar la labor.
 
 ### CU-05: Registrar Cosecha y Consultar ROI
 *   **Actor:** Agrónomo / Admin.
