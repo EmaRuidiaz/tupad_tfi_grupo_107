@@ -70,3 +70,40 @@ flowchart LR
     Op --> CU5
     Op --> CU7
 ```
+
+
+## 8.3. Diagrama de Secuencia (Validación Climática)
+
+Este diagrama ilustra el flujo de comunicación dinámico entre los componentes del sistema (Frontend, Backend, Base de Datos y Servicios Externos) durante la ejecución del Caso de Uso CU-04. Demuestra cómo se aplican las reglas de negocio en tiempo real.
+
+```mermaid
+sequenceDiagram
+    actor Agro as Agrónomo / Operario
+    participant UI as Frontend (React)
+    participant API as Backend (Spring Boot)
+    participant Ext as API Climática
+    participant DB as Base de Datos (PostgreSQL/H2)
+
+    Agro->>UI: Clic en "Iniciar Labor"
+    UI->>API: POST /api/labores/{id}/iniciar (Envia JWT)
+    
+    API->>DB: Obtener datos del lote (coordenadas) y labor
+    DB-->>API: Datos del lote y labor retornados
+    
+    API->>Ext: GET clima actual (latitud, longitud)
+    Ext-->>API: JSON con (temperatura, viento, humedad)
+    
+    API->>DB: Consultar regla_climatica para el tipo_labor
+    DB-->>API: Umbrales climáticos máximos/mínimos
+    
+    alt Clima Óptimo (Regla Cumplida)
+        API->>DB: Insertar movimiento_stock (Descontar Insumos)
+        API->>DB: UPDATE labor_agricola (estado='EN_EJECUCION')
+        API-->>UI: 200 OK (Labor Iniciada con éxito)
+        UI-->>Agro: Muestra mensaje de éxito y cronómetro de labor
+    else Clima Adverso (Regla Incumplida)
+        API->>DB: UPDATE labor_agricola (estado='BLOQUEADA_CLIMA')
+        API-->>UI: 409 Conflict (Alerta Climática)
+        UI-->>Agro: Muestra alerta de reprogramación por mal clima
+    end
+```
