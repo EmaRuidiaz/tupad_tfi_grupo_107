@@ -19,3 +19,7 @@ Para facilitar la lectura, esta entrega se ha dividido en los siguientes documen
 - [02_modelo_der.md](./02_modelo_der.md)
 - [03_diccionario_datos.md](./03_diccionario_datos.md)
 - [04_modulos.md](./04_modulos.md)
+- [05_requerimientos.md](./05_requerimientos.md)
+- [06_reglas_negocio_casos_uso.md](./06_reglas_negocio_casos_uso.md)
+- [07_arquitectura_trazabilidad.md](./07_arquitectura_trazabilidad.md)
+- [08_diagramas_complementarios.md](./08_diagramas_complementarios.md)
