@@ -7,7 +7,7 @@ El sistema se ha diseñado bajo una **Arquitectura de Capas (N-Tier)** enfocada 
 ### Componentes de la Arquitectura:
 
 1.  **Capa de Presentación (Frontend):**
-    *   **Tecnología:** (A definir en etapas posteriores, ej. React, Angular o vistas genéricas).
+    *   **Tecnología:** React (Single Page Application).
     *   **Responsabilidad:** Interfaz de usuario (UI), visualización de los tableros de ROI, formularios y manejo del token JWT en el cliente.
 2.  **Capa de Servicios y Negocio (Backend):**
     *   **Tecnología:** Java 17+ con Spring Boot 3.x.
