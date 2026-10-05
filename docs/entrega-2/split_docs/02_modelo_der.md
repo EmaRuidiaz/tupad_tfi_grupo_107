@@ -103,6 +103,7 @@ erDiagram
         VARCHAR categoria
         VARCHAR unidad_medida
         DECIMAL stock_actual
+        DECIMAL stock_reservado
         DECIMAL stock_minimo_alerta
         DECIMAL precio_unitario
     }
@@ -155,6 +156,7 @@ erDiagram
         BIGINT insumo_id FK
         DECIMAL cantidad_utilizada
         DECIMAL costo_subtotal
+        VARCHAR estado_reserva
     }
 
     REGISTRO_COSECHA {
@@ -183,3 +185,15 @@ erDiagram
         VARCHAR mensaje_alerta
     }
 ```
+
+### 2.1. Reserva lógica de stock
+
+Para dar soporte al caso de uso **CU-03 (Programar Labor Agrícola)**, el modelo incorpora la **reserva de stock** sin necesidad de una tabla adicional:
+
+* **`insumo.stock_reservado`**: cantidad del insumo comprometida por labores planificadas que todavía no se ejecutaron. El stock que puede asignarse a una nueva labor es el **stock disponible**: `stock_actual - stock_reservado`.
+* **`labor_insumo.estado_reserva`**: indica en qué situación se encuentra cada línea de insumo de una labor:
+  * `RESERVADO`: la labor está planificada y la cantidad está comprometida (suma en `stock_reservado`).
+  * `CONSUMIDO`: la labor se inició, se descontó el stock físico y se registró un `EGRESO_LABOR` en `movimiento_stock`.
+  * `LIBERADO`: la labor se canceló y la cantidad volvió a estar disponible.
+
+La reserva no genera registros en `movimiento_stock` porque no altera el stock físico; sólo el consumo real (`EGRESO_LABOR`) queda en el historial de movimientos. Las transiciones completas se documentan en [06_reglas_negocio_casos_uso.md](./06_reglas_negocio_casos_uso.md#63-estados-de-negocio-y-transiciones).
