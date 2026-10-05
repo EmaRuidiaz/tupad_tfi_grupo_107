@@ -27,12 +27,12 @@ INSERT INTO lote (nombre, superficie_ha, latitud, longitud, poligono_wkt, tipo_s
 ('Lote Este - Las Acacias', 150.00, -33.878000, -60.542000, 'POLYGON((-60.542 -33.878, -60.541 -33.878, -60.541 -33.877, -60.542 -33.877, -60.542 -33.878))', 'Franco Arenoso', 'LISTO_COSECHA', 'Maíz tardío próximo a recolección.', 2);
 
 -- 2. Insumos
-INSERT INTO insumo (nombre, categoria, unidad_medida, stock_actual, stock_minimo_alerta, precio_unitario) VALUES
-('Semilla Soja Don Mario 46i20', 'SEMILLA', 'BOLSAS', 450.00, 100.00, 55.00),
-('Glifosato Roundup Control 48%', 'FITOSANITARIO', 'LITROS', 1200.00, 300.00, 8.50),
-('Fertilizante Líquido SolMix', 'FERTILIZANTE', 'LITROS', 3500.00, 1000.00, 1.20),
-('Gasoil Grado 2 Agro', 'COMBUSTIBLE', 'LITROS', 5000.00, 1200.00, 1.10),
-('Fungicida Curalotodo Pro', 'FITOSANITARIO', 'LITROS', 45.00, 80.00, 32.00); 
+INSERT INTO insumo (nombre, categoria, unidad_medida, stock_actual, stock_reservado, stock_minimo_alerta, precio_unitario) VALUES
+('Semilla Soja Don Mario 46i20', 'SEMILLA', 'BOLSAS', 450.00, 0.00, 100.00, 55.00),
+('Glifosato Roundup Control 48%', 'FITOSANITARIO', 'LITROS', 1200.00, 170.00, 300.00, 8.50),
+('Fertilizante Líquido SolMix', 'FERTILIZANTE', 'LITROS', 3500.00, 0.00, 1000.00, 1.20),
+('Gasoil Grado 2 Agro', 'COMBUSTIBLE', 'LITROS', 5000.00, 0.00, 1200.00, 1.10),
+('Fungicida Curalotodo Pro', 'FITOSANITARIO', 'LITROS', 45.00, 0.00, 80.00, 32.00);
 
 -- 3. Maquinaria
 INSERT INTO maquinaria (nombre, tipo, matricula_o_serie, horas_uso_actuales, horas_para_proximo_service, consumo_litros_hora, costo_operativo_hora, estado) VALUES
@@ -54,20 +54,23 @@ INSERT INTO regla_climatica (tipo_labor, viento_max_kmh, viento_min_kmh, temp_mi
 
 -- 6. Labores Agrícolas
 INSERT INTO labor_agricola (lote_id, maquinaria_id, usuario_id, tipo_labor, fecha_planificada, fecha_ejecucion, estado, horas_maquina_consumidas, costo_total_calculado, temperatura_registrada, viento_velocidad_kmh, probabilidad_lluvia_pct, humedad_registrada_pct, observaciones_climaticas) VALUES
-(1, 1, 2, 'SIEMBRA', '2026-05-10 08:00:00', '2026-05-10 18:00:00', 'COMPLETADA', 10.00, 12500.00, 18.50, 9.20, 5.00, 45.0, 'Condiciones óptimas. Autorizada por motor de reglas.'),
-(1, 2, 2, 'PULVERIZACION', '2026-06-20 09:00:00', '2026-06-20 15:30:00', 'COMPLETADA', 6.50, 4320.00, 21.00, 7.80, 0.00, 50.0, 'Aplicación de herbicida post-emergente.'),
+(1, 1, 2, 'SIEMBRA', '2026-05-10 08:00:00', '2026-05-10 18:00:00', 'COMPLETADA', 10.00, 7231.50, 18.50, 9.20, 5.00, 45.0, 'Condiciones óptimas. Autorizada por motor de reglas.'),
+(1, 2, 2, 'PULVERIZACION', '2026-06-20 09:00:00', '2026-06-20 15:30:00', 'COMPLETADA', 6.50, 2587.30, 21.00, 7.80, 0.00, 50.0, 'Aplicación de herbicida post-emergente.'),
 (2, 2, 2, 'PULVERIZACION', '2026-09-18 10:00:00', NULL, 'PLANIFICADA', 0.00, 0.00, NULL, NULL, NULL, NULL, 'Programada para validación con pronóstico del día.');
 
 -- 7. Consumo de Insumos por Labor
-INSERT INTO labor_insumo (labor_id, insumo_id, cantidad_utilizada, costo_subtotal) VALUES
-(1, 1, 120.00, 6600.00),
-(1, 4, 165.00, 181.50),
-(2, 2, 240.00, 2040.00),
-(2, 4, 143.00, 157.30);
+-- costo_total_calculado = SUM(costo_subtotal) + horas_maquina_consumidas * costo_operativo_hora
+-- La labor 3 (PLANIFICADA) mantiene su insumo en estado RESERVADO hasta su ejecución.
+INSERT INTO labor_insumo (labor_id, insumo_id, cantidad_utilizada, costo_subtotal, estado_reserva) VALUES
+(1, 1, 120.00, 6600.00, 'CONSUMIDO'),
+(1, 4, 165.00, 181.50, 'CONSUMIDO'),
+(2, 2, 240.00, 2040.00, 'CONSUMIDO'),
+(2, 4, 143.00, 157.30, 'CONSUMIDO'),
+(3, 2, 170.00, 0.00, 'RESERVADO');
 
 -- 8. Compras y Movimientos de Stock
 INSERT INTO compra_insumo (proveedor_id, usuario_id, fecha_compra, total_compra) VALUES
-(1, 1, '2026-05-01 10:00:00', 50000.00);
+(1, 1, '2026-05-01 10:00:00', 31350.00);
 
 INSERT INTO detalle_compra (compra_id, insumo_id, cantidad, precio_unitario, subtotal) VALUES
 (1, 1, 570.00, 55.00, 31350.00);

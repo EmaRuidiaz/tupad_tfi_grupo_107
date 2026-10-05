@@ -75,11 +75,14 @@ CREATE TABLE insumo (
     categoria VARCHAR(40) NOT NULL,
     unidad_medida VARCHAR(20) NOT NULL,
     stock_actual DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+    stock_reservado DECIMAL(12, 2) NOT NULL DEFAULT 0.00, -- Cantidad comprometida por labores planificadas (reserva lógica)
     stock_minimo_alerta DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     precio_unitario DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     CONSTRAINT chk_insumo_categoria CHECK (categoria IN ('SEMILLA', 'FERTILIZANTE', 'FITOSANITARIO', 'COMBUSTIBLE')),
     CONSTRAINT chk_insumo_unidad CHECK (unidad_medida IN ('KILOGRAMOS', 'LITROS', 'BOLSAS', 'TONELADAS')),
     CONSTRAINT chk_insumo_stock CHECK (stock_actual >= 0),
+    CONSTRAINT chk_insumo_reservado CHECK (stock_reservado >= 0 AND stock_reservado <= stock_actual),
+    CONSTRAINT chk_insumo_minimo CHECK (stock_minimo_alerta >= 0),
     CONSTRAINT chk_insumo_precio CHECK (precio_unitario >= 0)
 );
 
@@ -171,10 +174,13 @@ CREATE TABLE labor_insumo (
     insumo_id BIGINT NOT NULL,
     cantidad_utilizada DECIMAL(12, 2) NOT NULL,
     costo_subtotal DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+    estado_reserva VARCHAR(20) NOT NULL DEFAULT 'RESERVADO',
     CONSTRAINT fk_laborinsumo_labor FOREIGN KEY (labor_id) REFERENCES labor_agricola (id) ON DELETE CASCADE,
     CONSTRAINT fk_laborinsumo_insumo FOREIGN KEY (insumo_id) REFERENCES insumo (id) ON DELETE RESTRICT,
     CONSTRAINT chk_laborinsumo_cantidad CHECK (cantidad_utilizada > 0),
-    CONSTRAINT chk_laborinsumo_costo CHECK (costo_subtotal >= 0)
+    CONSTRAINT chk_laborinsumo_costo CHECK (costo_subtotal >= 0),
+    CONSTRAINT chk_laborinsumo_reserva CHECK (estado_reserva IN ('RESERVADO', 'CONSUMIDO', 'LIBERADO')),
+    CONSTRAINT uq_laborinsumo UNIQUE (labor_id, insumo_id)
 );
 
 -- -----------------------------------------------------------------------------
@@ -197,7 +203,8 @@ CREATE TABLE registro_cosecha (
     CONSTRAINT fk_cosecha_cultivo FOREIGN KEY (cultivo_id) REFERENCES cultivo (id) ON DELETE RESTRICT,
     CONSTRAINT fk_cosecha_usuario FOREIGN KEY (usuario_id) REFERENCES usuario (id) ON DELETE SET NULL,
     CONSTRAINT chk_cosecha_toneladas CHECK (toneladas_totales >= 0),
-    CONSTRAINT chk_cosecha_rinde CHECK (rinde_ton_por_ha >= 0)
+    CONSTRAINT chk_cosecha_rinde CHECK (rinde_ton_por_ha >= 0),
+    CONSTRAINT chk_cosecha_precio CHECK (precio_venta_por_ton >= 0)
 );
 
 -- -----------------------------------------------------------------------------
@@ -210,7 +217,8 @@ CREATE TABLE compra_insumo (
     fecha_compra TIMESTAMP NOT NULL,
     total_compra DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     CONSTRAINT fk_compra_proveedor FOREIGN KEY (proveedor_id) REFERENCES proveedor(id) ON DELETE RESTRICT,
-    CONSTRAINT fk_compra_usuario FOREIGN KEY (usuario_id) REFERENCES usuario(id) ON DELETE RESTRICT
+    CONSTRAINT fk_compra_usuario FOREIGN KEY (usuario_id) REFERENCES usuario(id) ON DELETE RESTRICT,
+    CONSTRAINT chk_compra_total CHECK (total_compra >= 0)
 );
 
 CREATE TABLE detalle_compra (
@@ -221,7 +229,9 @@ CREATE TABLE detalle_compra (
     precio_unitario DECIMAL(12, 2) NOT NULL,
     subtotal DECIMAL(12, 2) NOT NULL,
     CONSTRAINT fk_detalle_compra FOREIGN KEY (compra_id) REFERENCES compra_insumo(id) ON DELETE CASCADE,
-    CONSTRAINT fk_detalle_insumo FOREIGN KEY (insumo_id) REFERENCES insumo(id) ON DELETE RESTRICT
+    CONSTRAINT fk_detalle_insumo FOREIGN KEY (insumo_id) REFERENCES insumo(id) ON DELETE RESTRICT,
+    CONSTRAINT chk_detalle_cantidad CHECK (cantidad > 0),
+    CONSTRAINT chk_detalle_precio CHECK (precio_unitario >= 0)
 );
 
 CREATE TABLE movimiento_stock (
@@ -251,3 +261,4 @@ CREATE INDEX idx_labor_fecha ON labor_agricola(fecha_planificada);
 CREATE INDEX idx_mantenimiento_maquina ON registro_mantenimiento(maquinaria_id);
 CREATE INDEX idx_cosecha_lote ON registro_cosecha(lote_id);
 CREATE INDEX idx_movimiento_insumo ON movimiento_stock(insumo_id);
+CREATE INDEX idx_laborinsumo_reserva ON labor_insumo(insumo_id, estado_reserva);
