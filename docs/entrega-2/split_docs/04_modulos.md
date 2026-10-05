@@ -7,6 +7,7 @@ A continuación se detalla la descomposición funcional del software, incorporan
 * **Funcionalidades:**
   * Login mediante JWT y roles (ADMIN, AGRONOMO, OPERARIO).
   * Registro de auditoría (usuario que autoriza labores, ejecuta compras o realiza movimientos de stock).
+  * Autorización por rol según la matriz de permisos (ver doc 07, sección 7.2).
 
 ### Módulo 2: Catastro y Gestión de Lotes (ABM) con Soporte GIS
 * **Objetivo:** Administrar las parcelas agrícolas.
@@ -26,6 +27,7 @@ A continuación se detalla la descomposición funcional del software, incorporan
 * **Funcionalidades:**
   * Alerta de stock crítico (ver Módulo 8).
   * Movimientos de Stock detallados (`INGRESO_COMPRA`, `EGRESO_LABOR`, `AJUSTE`).
+  * Reserva lógica de stock para labores planificadas (`stock_reservado`), distinguiendo stock físico y stock disponible (ver doc 02, sección 2.1).
 
 ### Módulo 5: Parque de Maquinaria y Mantenimiento Predictivo
 * **Objetivo:** Evitar downtime controlando horómetros.
@@ -34,11 +36,15 @@ A continuación se detalla la descomposición funcional del software, incorporan
 
 ### Módulo 6: Asistente Inteligente Climático
 * **Objetivo:** Validar labores agrícolas según variables meteorológicas (incluyendo humedad relativa, clave para pulverizaciones).
+* **Funcionalidades:**
+  * Comparación de las variables climáticas contra la `regla_climatica` del tipo de labor.
+  * Tolerancia a fallos de la API externa: timeout, reintentos, circuit breaker, caché de 30 minutos y autorización manual con justificación (ver doc 07, sección 7.3).
 
 ### Módulo 7: Gestión de Labores Agrícolas
 * **Objetivo:** Control operativo y costeo.
 * **Funcionalidades:**
-  * Las labores ejecutadas persisten el campo `costo_total_calculado` en base al consumo de insumos (registrado en stock) y horas de maquinaria.
+  * Las labores ejecutadas persisten el campo `costo_total_calculado` en base al consumo de insumos (registrado en stock) y horas de maquinaria (fórmula en doc 03, sección 3.15).
+  * Ciclo de vida de la labor con transiciones controladas: programación con reserva de insumos, validación climática, ejecución, cierre, cancelación y reprogramación (ver doc 06, sección 6.3.2).
 
 ### Módulo 8: Sistema de Alertas y Notificaciones Transversales (NUEVO)
 * **Objetivo:** Avisos proactivos al usuario para toma de decisiones.
@@ -46,7 +52,7 @@ A continuación se detalla la descomposición funcional del software, incorporan
   * **Stock Crítico:** Si `stock_actual <= stock_minimo_alerta`.
   * **Mantenimiento:** Si `horas_uso_actuales >= horas_para_proximo_service`.
   * **Clima adverso:** Avisos de reprogramación para labores en estado `BLOQUEADA_CLIMA`.
-  * **Lotes listos:** Lotes que llevan demasiado tiempo en `LISTO_COSECHA`.
+  * **Lotes listos:** Lotes que llevan más de 15 días en `LISTO_COSECHA`.
 
 ### Módulo 9: Tablero Financiero (ROI por Lote)
 * **Objetivo:** Consolidar el resultado agronómico y económico final.
