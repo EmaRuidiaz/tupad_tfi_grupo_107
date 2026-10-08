@@ -59,4 +59,3 @@ tupad_tfi_grupo_107/
 ├── .gitignore          # Archivos y configuraciones excluidas del repositorio
 └── README.md           # Documentación principal del proyecto
 ```
-
