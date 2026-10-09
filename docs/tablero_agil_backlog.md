@@ -15,6 +15,18 @@
   * **Descripción:** Como desarrollador frontend, quiero tener el proyecto React (Vite) inicializado con un enrutador (React Router) y una estructura base, para poder maquetar las primeras pantallas.
   * **Criterios de Aceptación:** Proyecto en carpeta `/frontend` compilando. Navbar o menú lateral básico funcionando.
 
+* **HU-14: Autenticación y Roles (Login JWT)**
+  * **Como** Usuario del sistema (Administrador, Agrónomo u Operario)
+  * **Quiero** iniciar sesión con mis credenciales y que el sistema restrinja las funciones según mi rol.
+  * **Para** proteger la información y garantizar que cada acción quede asociada a un usuario responsable (RF-01, RNF-01).
+  * **Dependencias:** HU-01 (backend base). La pantalla de login del frontend requiere además HU-02.
+  * **Criterios de Aceptación:**
+    1. Backend: entidad `Usuario` y `POST /api/auth/login` que, con credenciales válidas, devuelve un token JWT con el rol y expiración de 8 horas.
+    2. Las contraseñas se almacenan con BCrypt (factor 10); los datos semilla de `database/data.sql` usan hashes BCrypt reales.
+    3. Petición sin token o con token vencido a cualquier endpoint distinto de `/api/auth/login` (y `/actuator/health`) responde `401 Unauthorized`.
+    4. Endpoint no permitido para el rol del usuario responde `403 Forbidden`, según la matriz de permisos del doc 07 (sección 7.2), aplicada con `@PreAuthorize`.
+    5. Frontend (una vez completada HU-02): pantalla de login, almacenamiento del token y envío en cada request; redirección al login ante un `401`.
+
 ---
 
 ## 🗺️ Épica 1: Catastro e Inventario
