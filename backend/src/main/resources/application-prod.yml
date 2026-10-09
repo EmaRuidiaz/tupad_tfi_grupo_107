@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:agtechdb}
+    # Sin valores por defecto: las credenciales deben venir del entorno.
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driverClassName: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  sql:
+    init:
+      # schema.sql contiene DROP TABLE: jamás debe ejecutarse automáticamente contra producción.
+      # El esquema se aplica una única vez de forma manual (ver backend/README.md).
+      mode: never
+  h2:
+    console:
+      enabled: false
