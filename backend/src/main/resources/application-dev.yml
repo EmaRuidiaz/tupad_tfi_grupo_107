@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    # MODE=PostgreSQL acerca el comportamiento de H2 al de producción; DB_CLOSE_DELAY mantiene la BD viva mientras corre la JVM.
+    url: jdbc:h2:mem:agtechdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    driverClassName: org.h2.Driver
+    username: sa
+    password: password
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    hibernate:
+      # El esquema lo define /database/schema.sql (fuente de verdad), no Hibernate.
+      ddl-auto: none
+    show-sql: false
+  sql:
+    init:
+      # Carga schema.sql + data.sql (copiados al classpath desde /database por el pom).
+      mode: always
