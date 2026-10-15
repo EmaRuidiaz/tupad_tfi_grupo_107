@@ -5,10 +5,11 @@
 -- =============================================================================
 
 -- 0. Usuarios y Proveedores
+-- Contraseña de desarrollo/demo de los tres usuarios: agtech123 (hashes BCrypt, factor 10). Cambiar en producción.
 INSERT INTO usuario (username, password_hash, rol, email) VALUES
-('admin', 'hash_admin', 'ADMIN', 'admin@agtech.com'),
-('agronomo1', 'hash_agro', 'AGRONOMO', 'agronomo@agtech.com'),
-('operario1', 'hash_oper', 'OPERARIO', 'operador@agtech.com');
+('admin', '$2a$10$SV1Jz78r5O9dw4EolXgLnOQB67V8KmXOO9Zu1TGFn5GY.YkKAeUcy', 'ADMIN', 'admin@agtech.com'),
+('agronomo1', '$2a$10$IO1dMqnc3BX8DUA6tnZPf.UhBckWT0blK69tqoyO4mqPs5F3LtKty', 'AGRONOMO', 'agronomo@agtech.com'),
+('operario1', '$2a$10$61G3hT3CpUfrOLPMMC74Wu6kzMjdExffBBwn8.E/sDZlCIFbE4CFC', 'OPERARIO', 'operador@agtech.com');
 
 INSERT INTO proveedor (nombre, cuit, telefono, email) VALUES
 ('Agroinsumos del Centro', '30-12345678-9', '02477-123456', 'ventas@agrocentro.com'),

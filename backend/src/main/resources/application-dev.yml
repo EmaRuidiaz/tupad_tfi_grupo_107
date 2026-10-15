@@ -18,3 +18,7 @@ spring:
     init:
       # Carga schema.sql + data.sql (copiados al classpath desde /database por el pom).
       mode: always
+app:
+  jwt:
+    # Sólo para desarrollo/tests (>= 32 bytes). NO usar en producción.
+    secret: dev-only-secret-change-me-agtech-grupo107-0123456789

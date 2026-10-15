@@ -17,3 +17,7 @@ spring:
   h2:
     console:
       enabled: false
+app:
+  jwt:
+    # Sin valor por defecto: debe venir del entorno (mínimo 32 caracteres).
+    secret: ${JWT_SECRET}

@@ -14,6 +14,14 @@ server:
 app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  jwt:
+    # Vigencia del token: 8 horas (HU-14). El secreto se define por perfil (dev) o variable de entorno JWT_SECRET (prod).
+    expiration-ms: 28800000
+
+logging:
+  level:
+    # Aviso informativo: la app define su propio AuthenticationProvider (DaoAuthenticationProvider + BCrypt).
+    org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer: ERROR
 
 # Actuator: sólo /actuator/health es público y sin detalles (ver docs/entrega-2/split_docs/09_operacion_monitoreo.md)
 management:
