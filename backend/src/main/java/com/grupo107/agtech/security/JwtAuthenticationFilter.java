@@ -41,7 +41,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         } catch (Exception e) {
-            logger.error("No se pudo establecer la autenticación de usuario: {}", e);
+            // Se continúa sin autenticar: el EntryPoint responderá 401 si el endpoint lo requiere.
+            logger.warn("No se pudo establecer la autenticación de usuario: " + e.getMessage());
         }
 
         filterChain.doFilter(request, response);
