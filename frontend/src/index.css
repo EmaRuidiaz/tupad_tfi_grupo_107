@@ -1,0 +1,148 @@
+:root {
+  --color-primario: #2e7d32;
+  --color-primario-oscuro: #1b5e20;
+  --color-fondo: #f5f7f5;
+  --color-superficie: #ffffff;
+  --color-texto: #1f2a1f;
+  --color-texto-suave: #5f6b5f;
+  --color-borde: #dde3dd;
+  --ancho-sidebar: 240px;
+
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--color-texto);
+  background-color: var(--color-fondo);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+h1 {
+  margin-top: 0;
+  font-size: 1.75rem;
+}
+
+a {
+  color: var(--color-primario);
+}
+
+/* Layout general */
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.contenido {
+  flex: 1;
+  padding: 2rem;
+  min-width: 0;
+}
+
+/* Menú lateral */
+.sidebar {
+  width: var(--ancho-sidebar);
+  flex-shrink: 0;
+  background-color: var(--color-primario-oscuro);
+  color: #fff;
+  padding: 1.5rem 1rem;
+}
+
+.sidebar__marca {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 2rem;
+}
+
+.sidebar__menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sidebar__link {
+  display: block;
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  color: #e8f5e9;
+  text-decoration: none;
+}
+
+.sidebar__link:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar__link--activo {
+  background-color: var(--color-primario);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Barra superior: solo visible en pantallas chicas */
+.topbar {
+  display: none;
+}
+
+.aviso {
+  display: inline-block;
+  padding: 0.75rem 1rem;
+  border: 1px dashed var(--color-borde);
+  border-radius: 6px;
+  background-color: var(--color-superficie);
+  color: var(--color-texto-suave);
+}
+
+@media (max-width: 768px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background-color: var(--color-primario-oscuro);
+    color: #fff;
+  }
+
+  .topbar__toggle {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 1.5rem;
+    cursor: pointer;
+  }
+
+  .topbar__titulo {
+    font-weight: 700;
+  }
+
+  .sidebar {
+    display: none;
+    width: 100%;
+    padding: 0.5rem 1rem 1rem;
+  }
+
+  .sidebar--abierto {
+    display: block;
+  }
+
+  .sidebar__marca {
+    display: none;
+  }
+
+  .contenido {
+    padding: 1.25rem 1rem;
+  }
+}
