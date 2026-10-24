@@ -11,10 +11,6 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 
-/**
- * Alta y modificación de insumos. Los importes y cantidades respetan el tipo
- * {@code DECIMAL(12, 2)} de la tabla {@code insumo}: hasta 10 enteros y 2 decimales.
- */
 @Data
 public class InsumoRequest {
 
@@ -28,11 +24,6 @@ public class InsumoRequest {
     @NotNull(message = "La unidad de medida es obligatoria")
     private UnidadMedida unidadMedida;
 
-    /**
-     * Stock físico inicial al dar de alta el insumo (opcional, por defecto 0).
-     * Si es mayor a 0, el servicio genera automáticamente un movimiento AJUSTE ("Stock inicial").
-     * Se ignora en la modificación: el stock sólo cambia mediante movimientos.
-     */
     @PositiveOrZero(message = "El stock inicial no puede ser negativo")
     @Digits(integer = 10, fraction = 2, message = "El stock inicial admite hasta 10 enteros y 2 decimales")
     private BigDecimal stockInicial;

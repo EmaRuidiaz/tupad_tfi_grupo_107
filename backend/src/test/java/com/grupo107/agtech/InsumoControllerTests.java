@@ -20,9 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-/**
- * Tests de integración para HU-04 (Gestión de Inventario, Alertas y Movimientos de Stock).
- */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
@@ -47,8 +44,6 @@ class InsumoControllerTests {
 
     @Test
     void cualquierRolAutenticadoPuedeListarInsumosYVerIndicadorDeStockCritico() throws Exception {
-        // En data.sql hay 5 insumos: el #5 (Fungicida Curalotodo Pro) tiene stock_actual=45 <= stock_minimo_alerta=80
-        // y el #2 (Glifosato) tiene stock_actual=1200, stock_reservado=170 -> stockDisponible=1030
         for (String user : new String[]{"admin", "agronomo1", "operario1"}) {
             mockMvc.perform(get("/api/insumos").header("Authorization", bearer(user)))
                     .andExpect(status().isOk())
@@ -104,7 +99,6 @@ class InsumoControllerTests {
 
         Integer idCreado = JsonPath.read(response, "$.id");
 
-        // Debe haberse generado el movimiento AJUSTE "Stock inicial" con el usuario admin
         mockMvc.perform(get("/api/insumos/" + idCreado + "/movimientos")
                         .header("Authorization", tokenAdmin))
                 .andExpect(status().isOk())
@@ -152,7 +146,6 @@ class InsumoControllerTests {
     void actualizarInsumoModificaCatalogoYUmbralSinAlterarStockFisico() throws Exception {
         String tokenAdmin = bearer("admin");
 
-        // El insumo 1 tiene stock_actual = 450.00. Si subimos stockMinimoAlerta a 500, pasa a stockCritico = true
         mockMvc.perform(put("/api/insumos/1")
                         .header("Authorization", tokenAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -177,7 +170,6 @@ class InsumoControllerTests {
     void ajusteDeStockActualizaStockActualYRegistraAuditoriasValidaRestricciones() throws Exception {
         String tokenAdmin = bearer("admin");
 
-        // 1. Ajuste válido positivo sobre insumo 5 (stock 45 + 50 = 95 > mínimo 80 -> sale de stock crítico)
         mockMvc.perform(post("/api/insumos/5/ajustes")
                         .header("Authorization", tokenAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -193,21 +185,18 @@ class InsumoControllerTests {
                 .andExpect(jsonPath("$.stockActual").value(95.0))
                 .andExpect(jsonPath("$.stockCritico").value(false));
 
-        // 2. Rechazo si no se envía observación (RF-03 criterio 4)
         mockMvc.perform(post("/api/insumos/5/ajustes")
                         .header("Authorization", tokenAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"cantidad\": -10.00, \"observacion\": \"   \"}"))
                 .andExpect(status().isBadRequest());
 
-        // 3. Rechazo si el ajuste deja stock negativo
         mockMvc.perform(post("/api/insumos/5/ajustes")
                         .header("Authorization", tokenAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"cantidad\": -500.00, \"observacion\": \"Baja excesiva\"}"))
                 .andExpect(status().isBadRequest());
 
-        // 4. Rechazo si el ajuste deja stock_actual por debajo de stock_reservado (insumo 2: actual 1200, reservado 170)
         mockMvc.perform(post("/api/insumos/2/ajustes")
                         .header("Authorization", tokenAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -219,7 +208,6 @@ class InsumoControllerTests {
     void eliminarInsumoSinReferenciasDevuelve204YConReferenciasDevuelve409() throws Exception {
         String tokenAdmin = bearer("admin");
 
-        // Crear insumo con stockInicial = 0 (sin movimientos ni referencias)
         String body = mockMvc.perform(post("/api/insumos")
                         .header("Authorization", tokenAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -243,7 +231,6 @@ class InsumoControllerTests {
         mockMvc.perform(get("/api/insumos/" + idTemporal).header("Authorization", tokenAdmin))
                 .andExpect(status().isNotFound());
 
-        // Intentar eliminar insumo semilla #1 (con compras, labores y movimientos) -> 409 Conflict
         mockMvc.perform(delete("/api/insumos/1").header("Authorization", tokenAdmin))
                 .andExpect(status().isConflict());
     }
@@ -252,7 +239,6 @@ class InsumoControllerTests {
     void valoresNumericosFueraDeLaPrecisionDeLaBaseDevuelven400() throws Exception {
         String tokenAdmin = bearer("admin");
 
-        // Más de 2 decimales en el precio
         mockMvc.perform(post("/api/insumos")
                         .header("Authorization", tokenAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -268,7 +254,6 @@ class InsumoControllerTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("precio unitario")));
 
-        // Más de 10 enteros en el ajuste
         mockMvc.perform(post("/api/insumos/3/ajustes")
                         .header("Authorization", tokenAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -279,7 +264,6 @@ class InsumoControllerTests {
 
     @Test
     void noSePuedeEliminarUnInsumoQueTodaviaTieneStock() throws Exception {
-        // Insumo 3 (Fertilizante SolMix): 3500 L en stock, sin labores asociadas
         mockMvc.perform(delete("/api/insumos/3").header("Authorization", bearer("admin")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value(containsString("todavía tiene stock")));
@@ -296,7 +280,7 @@ class InsumoControllerTests {
                     (SELECT SUM(m.cantidad) FROM movimiento_stock m WHERE m.insumo_id = i.id), 0)
                 """, Integer.class);
         assertEquals(0, inconsistentes,
-                "Todo insumo debe cumplir stock_actual = SUM(movimiento_stock.cantidad) (doc 03, sección 3.15)");
+                "Todo insumo debe cumplir stock_actual = SUM(movimiento_stock.cantidad)");
     }
 
     @Test
@@ -304,6 +288,6 @@ class InsumoControllerTests {
         boolean tieneDelete = Arrays.stream(MovimientoStockRepository.class.getMethods())
                 .map(Method::getName)
                 .anyMatch(name -> name.startsWith("delete"));
-        assertFalse(tieneDelete, "MovimientoStockRepository no debe exponer operaciones delete (RN-09)");
+        assertFalse(tieneDelete, "MovimientoStockRepository no debe exponer operaciones delete");
     }
 }

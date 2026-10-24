@@ -15,13 +15,11 @@ function Insumos() {
   const [errorGlobal, setErrorGlobal] = useState('')
   const [mensajeExito, setMensajeExito] = useState('')
 
-  // Filtros
   const [busqueda, setBusqueda] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('TODAS')
   const [soloCriticos, setSoloCriticos] = useState(false)
 
-  // Modales activos (null = cerrado)
-  const [modalFormulario, setModalFormulario] = useState(null) // { insumo: null | Insumo }
+  const [modalFormulario, setModalFormulario] = useState(null)
   const [insumoAjuste, setInsumoAjuste] = useState(null)
   const [insumoHistorial, setInsumoHistorial] = useState(null)
 
@@ -131,7 +129,6 @@ function Insumos() {
         </div>
       </div>
 
-      {/* Tarjetas de resumen */}
       <div className="tarjetas-resumen">
         <div className="tarjeta-kpi">
           <span className="tarjeta-kpi__titulo">Total en catálogo</span>
@@ -170,7 +167,6 @@ function Insumos() {
         </div>
       )}
 
-      {/* Barra de filtros */}
       <div className="barra-filtros">
         <input
           type="search"
@@ -204,7 +200,6 @@ function Insumos() {
         </label>
       </div>
 
-      {/* Tabla principal */}
       {cargando ? (
         <p className="aviso">Cargando inventario de insumos...</p>
       ) : insumosFiltrados.length === 0 ? (

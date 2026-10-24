@@ -1,9 +1,5 @@
 import { useEffect } from 'react'
 
-/**
- * Diálogo modal reutilizable para formularios y vistas de detalle.
- * Cierra al presionar Escape o hacer clic fuera de la tarjeta.
- */
 function Modal({ abierto, titulo, onCerrar, ancho = false, children }) {
   useEffect(() => {
     if (!abierto) return undefined

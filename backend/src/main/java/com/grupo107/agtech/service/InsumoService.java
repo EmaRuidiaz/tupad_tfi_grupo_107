@@ -66,7 +66,6 @@ public class InsumoService {
 
         Insumo guardado = insumoRepository.save(insumo);
 
-        // Regla doc 03 (sección 3.15): el stock inicial se registra como un AJUSTE ("Stock inicial").
         if (stockInicial.compareTo(BigDecimal.ZERO) > 0) {
             Usuario usuario = buscarUsuario(username);
             MovimientoStock movInicial = new MovimientoStock();

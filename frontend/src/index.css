@@ -154,7 +154,6 @@ a {
   color: var(--color-texto-suave);
 }
 
-/* Login */
 .login-contenedor {
   min-height: 100vh;
   display: flex;
@@ -212,7 +211,6 @@ a {
   gap: 0.4rem;
 }
 
-/* Páginas de módulo */
 .pagina {
   display: flex;
   flex-direction: column;
@@ -232,7 +230,6 @@ a {
   color: var(--color-texto-suave);
 }
 
-/* Tarjetas KPI */
 .tarjetas-resumen {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -273,7 +270,6 @@ a {
   color: var(--color-texto-suave);
 }
 
-/* Filtros */
 .barra-filtros {
   display: flex;
   flex-wrap: wrap;
@@ -311,7 +307,6 @@ a {
   user-select: none;
 }
 
-/* Tabla */
 .tabla-contenedor {
   overflow-x: auto;
   background-color: var(--color-superficie);
@@ -353,7 +348,6 @@ a {
   gap: 0.35rem;
 }
 
-/* Etiquetas / Badges */
 .etiqueta {
   display: inline-block;
   padding: 0.2rem 0.55rem;
@@ -381,7 +375,6 @@ a {
   color: #1565c0;
 }
 
-/* Botones */
 .btn {
   border: 1px solid transparent;
   border-radius: 6px;
@@ -431,7 +424,6 @@ a {
   width: 100%;
 }
 
-/* Formularios y Modales */
 .formulario {
   display: flex;
   flex-direction: column;
@@ -548,7 +540,6 @@ a {
   font-size: 0.9rem;
 }
 
-/* Utilidades de texto */
 .texto-derecha {
   text-align: right !important;
 }

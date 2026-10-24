@@ -2,9 +2,6 @@ import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { getSession, login } from '../services/api.js'
 
-// Accesos rápidos con los usuarios semilla de database/data.sql.
-// Sólo existen en desarrollo: en el build de producción `import.meta.env.DEV` es `false`
-// y Vite elimina estos datos del bundle, por lo que la contraseña no queda publicada.
 const USUARIOS_DEMO = import.meta.env.DEV
   ? [
       { username: 'admin', rol: 'ADMIN (ABM completo)' },

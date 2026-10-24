@@ -14,14 +14,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * API REST para la gestión del catálogo de insumos, alertas de stock mínimo
- * y auditoría de movimientos/ajustes de stock (HU-04, RF-03, RN-04, RN-09).
- *
- * Permisos según doc 07 (sección 7.2):
- * - Consulta de insumos e historial de movimientos: ADMIN, AGRONOMO, OPERARIO.
- * - Alta, modificación, baja y ajustes de stock: sólo ADMIN.
- */
 @RestController
 @RequestMapping("/api/insumos")
 public class InsumoController {

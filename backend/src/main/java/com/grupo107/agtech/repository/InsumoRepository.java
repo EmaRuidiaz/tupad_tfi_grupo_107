@@ -16,10 +16,6 @@ public interface InsumoRepository extends JpaRepository<Insumo, Long> {
 
     List<Insumo> findAllByOrderByIdAsc();
 
-    /**
-     * Obtiene el insumo aplicando un bloqueo pesimista de escritura ({@code SELECT ... FOR UPDATE})
-     * para evitar condiciones de carrera (lost updates) ante ajustes o consumos simultáneos.
-     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT i FROM Insumo i WHERE i.id = :id")
     Optional<Insumo> findByIdForUpdate(@Param("id") Long id);
