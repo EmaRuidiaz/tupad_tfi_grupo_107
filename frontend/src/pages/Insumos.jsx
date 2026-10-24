@@ -303,7 +303,7 @@ function Insumos() {
           <span className="tarjeta-kpi__titulo">En stock crítico</span>
           <strong className="tarjeta-kpi__valor">{resumen.criticos}</strong>
           <span className="tarjeta-kpi__detalle">
-            stock_actual &le; stock_minimo_alerta
+            Igual o por debajo del mínimo de alerta
           </span>
         </div>
 
@@ -616,7 +616,7 @@ function Insumos() {
                   {formatearNumero(insumoEditando.stockActual)}{' '}
                   {insumoEditando.unidadMedida}) sólo se modifica mediante
                   compras, labores o el botón &laquo;Ajustar&raquo; para
-                  preservar la auditoría (RN-09).
+                  mantener el historial de movimientos.
                 </p>
               )}
 
@@ -707,7 +707,7 @@ function Insumos() {
 
               <div className="campo">
                 <label htmlFor="ajuste-observacion">
-                  Observación / Motivo del ajuste (obligatorio - RF-03)
+                  Observación / Motivo del ajuste
                 </label>
                 <textarea
                   id="ajuste-observacion"
