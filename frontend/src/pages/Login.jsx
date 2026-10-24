@@ -2,11 +2,17 @@ import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { getSession, login } from '../services/api.js'
 
-const USUARIOS_DEMO = [
-  { username: 'admin', rol: 'ADMIN (ABM completo)' },
-  { username: 'agronomo1', rol: 'AGRONOMO (Consulta)' },
-  { username: 'operario1', rol: 'OPERARIO (Consulta)' },
-]
+// Accesos rápidos con los usuarios semilla de database/data.sql.
+// Sólo existen en desarrollo: en el build de producción `import.meta.env.DEV` es `false`
+// y Vite elimina estos datos del bundle, por lo que la contraseña no queda publicada.
+const USUARIOS_DEMO = import.meta.env.DEV
+  ? [
+      { username: 'admin', rol: 'ADMIN (ABM completo)' },
+      { username: 'agronomo1', rol: 'AGRONOMO (Consulta)' },
+      { username: 'operario1', rol: 'OPERARIO (Consulta)' },
+    ]
+  : []
+const PASSWORD_DEMO = import.meta.env.DEV ? 'agtech123' : ''
 
 function Login() {
   const navigate = useNavigate()
@@ -39,7 +45,7 @@ function Login() {
 
   function completarDemo(usuarioDemo) {
     setUsername(usuarioDemo)
-    setPassword('agtech123')
+    setPassword(PASSWORD_DEMO)
     setError('')
   }
 
@@ -94,21 +100,25 @@ function Login() {
           </button>
         </form>
 
-        <div className="login-demo">
-          <p className="login-demo__titulo">Acceso rápido de desarrollo (clave: agtech123):</p>
-          <div className="login-demo__botones">
-            {USUARIOS_DEMO.map((u) => (
-              <button
-                key={u.username}
-                type="button"
-                className="btn btn--secundario btn--chico"
-                onClick={() => completarDemo(u.username)}
-              >
-                {u.rol}
-              </button>
-            ))}
+        {USUARIOS_DEMO.length > 0 && (
+          <div className="login-demo">
+            <p className="login-demo__titulo">
+              Acceso rápido de desarrollo (clave: {PASSWORD_DEMO}):
+            </p>
+            <div className="login-demo__botones">
+              {USUARIOS_DEMO.map((u) => (
+                <button
+                  key={u.username}
+                  type="button"
+                  className="btn btn--secundario btn--chico"
+                  onClick={() => completarDemo(u.username)}
+                >
+                  {u.rol}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )
