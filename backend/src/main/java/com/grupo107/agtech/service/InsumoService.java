@@ -84,7 +84,7 @@ public class InsumoService {
 
     @Transactional
     public InsumoResponse actualizar(Long id, InsumoRequest request) {
-        Insumo insumo = buscarInsumo(id);
+        Insumo insumo = buscarInsumoParaActualizar(id);
         insumo.setNombre(request.getNombre().trim());
         insumo.setCategoria(request.getCategoria());
         insumo.setUnidadMedida(request.getUnidadMedida());
@@ -96,7 +96,7 @@ public class InsumoService {
 
     @Transactional
     public void eliminar(Long id) {
-        Insumo insumo = buscarInsumo(id);
+        Insumo insumo = buscarInsumoParaActualizar(id);
         if (insumo.getStockActual().compareTo(BigDecimal.ZERO) > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "No se puede eliminar el insumo porque todavía tiene stock (" + insumo.getStockActual()
@@ -117,7 +117,7 @@ public class InsumoService {
 
     @Transactional
     public MovimientoStockResponse registrarAjuste(Long id, AjusteStockRequest request, String username) {
-        Insumo insumo = buscarInsumo(id);
+        Insumo insumo = buscarInsumoParaActualizar(id);
 
         if (request.getCantidad().compareTo(BigDecimal.ZERO) == 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -162,6 +162,12 @@ public class InsumoService {
 
     private Insumo buscarInsumo(Long id) {
         return insumoRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Insumo no encontrado con id: " + id));
+    }
+
+    private Insumo buscarInsumoParaActualizar(Long id) {
+        return insumoRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Insumo no encontrado con id: " + id));
     }
