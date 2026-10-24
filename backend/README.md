@@ -64,6 +64,39 @@ curl http://localhost:8080/api/... -H "Authorization: Bearer <token>"
 
 Los errores de seguridad se devuelven en JSON: `{"status":401,"error":"Unauthorized","message":"..."}`.
 
+## Inventario de insumos (HU-04)
+
+| Método | Endpoint | Roles | Descripción |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/insumos` | Todos | Lista el catálogo. `?stockCritico=true` devuelve sólo los insumos con `stock_actual <= stock_minimo_alerta` |
+| `GET` | `/api/insumos/{id}` | Todos | Detalle de un insumo |
+| `GET` | `/api/insumos/{id}/movimientos` | Todos | Historial de movimientos de stock (más reciente primero) |
+| `POST` | `/api/insumos` | `ADMIN` | Alta. Si `stockInicial > 0` se registra un `AJUSTE` "Stock inicial" |
+| `PUT` | `/api/insumos/{id}` | `ADMIN` | Modifica datos de catálogo, umbral y precio. **No** modifica el stock |
+| `DELETE` | `/api/insumos/{id}` | `ADMIN` | Baja. Rechazada (`409`) si el insumo tiene stock o movimientos |
+| `POST` | `/api/insumos/{id}/ajustes` | `ADMIN` | Ajuste manual (`cantidad` positiva o negativa + `observacion` obligatoria) |
+
+Cada respuesta de insumo incluye los campos derivados `stockDisponible` (`stockActual - stockReservado`) y `stockCritico`.
+
+**Reglas que aplica el backend:**
+* El stock físico sólo cambia mediante movimientos, que quedan asociados al usuario del token (RN-04). Los movimientos no se modifican ni se borran (RN-09).
+* Un ajuste no puede dejar el stock negativo ni por debajo del stock reservado por labores.
+* Cantidades e importes: hasta 10 enteros y 2 decimales (`DECIMAL(12, 2)`); fuera de rango responde `400`.
+* Los datos semilla cumplen `stock_actual = SUM(movimiento_stock.cantidad)` para cada insumo (verificado por test).
+
+```bash
+# Ajuste de stock (requiere token de admin)
+curl -X POST http://localhost:8080/api/insumos/5/ajustes \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"cantidad": 50, "observacion": "Recuento físico de depósito"}'
+```
+
+| Situación | Respuesta |
+| :--- | :--- |
+| Validación de campos (obligatorios, negativos, precisión) o ajuste inválido | `400` |
+| Insumo inexistente | `404` |
+| Baja de un insumo con stock, movimientos o labores asociadas | `409` |
+
 ## Configuración útil
 
 | Variable | Default | Uso |
@@ -82,5 +115,6 @@ com.grupo107.agtech
 ├── controller/    # Controllers REST (prefijo /api) y manejo de errores
 ├── model/         # Entidades JPA
 ├── repository/    # Repositorios Spring Data
+├── service/       # Lógica de negocio y reglas transaccionales
 └── security/      # JWT, filtro de autenticación y reglas de acceso (HU-14)
 ```
