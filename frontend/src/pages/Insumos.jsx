@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import ConfirmModal from '../components/ConfirmModal.jsx'
 import AjusteStockModal from '../components/insumos/AjusteStockModal.jsx'
 import HistorialMovimientosModal from '../components/insumos/HistorialMovimientosModal.jsx'
 import InsumoFormModal from '../components/insumos/InsumoFormModal.jsx'
@@ -22,6 +23,9 @@ function Insumos() {
   const [modalFormulario, setModalFormulario] = useState(null)
   const [insumoAjuste, setInsumoAjuste] = useState(null)
   const [insumoHistorial, setInsumoHistorial] = useState(null)
+  const [insumoAEliminar, setInsumoAEliminar] = useState(null)
+  const [eliminando, setEliminando] = useState(false)
+  const [errorEliminacion, setErrorEliminacion] = useState('')
 
   const recargarInsumos = useCallback(async () => {
     setErrorGlobal('')
@@ -81,20 +85,20 @@ function Insumos() {
     })
   }, [insumos, soloCriticos, categoriaFiltro, busqueda])
 
-  async function manejarEliminar(insumo) {
-    const confirmado = window.confirm(
-      `¿Eliminar el insumo "${insumo.nombre}"? Sólo se permite si no tiene stock ni movimientos registrados.`,
-    )
-    if (!confirmado) return
-
-    setErrorGlobal('')
-    setMensajeExito('')
+  async function confirmarEliminar() {
+    if (!insumoAEliminar) return
+    setEliminando(true)
+    setErrorEliminacion('')
     try {
-      await eliminarInsumo(insumo.id)
-      setMensajeExito(`Insumo "${insumo.nombre}" eliminado.`)
+      await eliminarInsumo(insumoAEliminar.id)
+      const nombre = insumoAEliminar.nombre
+      setInsumoAEliminar(null)
+      setMensajeExito(`Insumo "${nombre}" eliminado.`)
       await recargarInsumos()
     } catch (err) {
-      setErrorGlobal(err.message || 'No se pudo eliminar el insumo.')
+      setErrorEliminacion(err.message || 'No se pudo eliminar el insumo.')
+    } finally {
+      setEliminando(false)
     }
   }
 
@@ -298,7 +302,11 @@ function Insumos() {
                           <button
                             type="button"
                             className="btn btn--peligro btn--chico"
-                            onClick={() => manejarEliminar(item)}
+                            onClick={() => {
+                              setMensajeExito('')
+                              setErrorEliminacion('')
+                              setInsumoAEliminar(item)
+                            }}
                           >
                             Eliminar
                           </button>
@@ -343,6 +351,26 @@ function Insumos() {
           onCerrar={() => setInsumoHistorial(null)}
         />
       )}
+
+      <ConfirmModal
+        abierto={Boolean(insumoAEliminar)}
+        titulo="Eliminar insumo"
+        mensaje={
+          insumoAEliminar
+            ? `¿Confirmás la eliminación del insumo "${insumoAEliminar.nombre}"?`
+            : ''
+        }
+        detalle="Solo se permite eliminar insumos sin stock actual, sin reservas activas y sin movimientos registrados."
+        cargando={eliminando}
+        error={errorEliminacion}
+        onCancelar={() => {
+          if (!eliminando) {
+            setInsumoAEliminar(null)
+            setErrorEliminacion('')
+          }
+        }}
+        onConfirmar={confirmarEliminar}
+      />
     </section>
   )
 }

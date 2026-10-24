@@ -415,6 +415,19 @@ a {
   border-color: var(--color-alerta-borde);
 }
 
+.btn--peligro:hover:not(:disabled) {
+  background-color: #ffcdd2;
+}
+
+.btn--peligro-solido {
+  background-color: var(--color-peligro);
+  color: #fff;
+}
+
+.btn--peligro-solido:hover:not(:disabled) {
+  background-color: #b71c1c;
+}
+
 .btn--chico {
   padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
@@ -520,6 +533,22 @@ a {
   font-size: 1.2rem;
   cursor: pointer;
   color: var(--color-texto-suave);
+}
+
+.modal__cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.modal__mensaje {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.modal__detalle {
+  margin: 0;
 }
 
 .modal__pie {
