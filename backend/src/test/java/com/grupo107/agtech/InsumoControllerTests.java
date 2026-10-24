@@ -249,6 +249,35 @@ class InsumoControllerTests {
     }
 
     @Test
+    void valoresNumericosFueraDeLaPrecisionDeLaBaseDevuelven400() throws Exception {
+        String tokenAdmin = bearer("admin");
+
+        // Más de 2 decimales en el precio
+        mockMvc.perform(post("/api/insumos")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nombre": "Insumo con precio inválido",
+                                  "categoria": "SEMILLA",
+                                  "unidadMedida": "BOLSAS",
+                                  "stockMinimoAlerta": 10,
+                                  "precioUnitario": 1.234
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("precio unitario")));
+
+        // Más de 10 enteros en el ajuste
+        mockMvc.perform(post("/api/insumos/3/ajustes")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cantidad\": 12345678901, \"observacion\": \"Fuera de rango\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("cantidad del ajuste")));
+    }
+
+    @Test
     void noSePuedeEliminarUnInsumoQueTodaviaTieneStock() throws Exception {
         // Insumo 3 (Fertilizante SolMix): 3500 L en stock, sin labores asociadas
         mockMvc.perform(delete("/api/insumos/3").header("Authorization", bearer("admin")))
