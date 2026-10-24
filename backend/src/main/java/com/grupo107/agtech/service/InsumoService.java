@@ -97,6 +97,11 @@ public class InsumoService {
     @Transactional
     public void eliminar(Long id) {
         Insumo insumo = buscarInsumo(id);
+        if (insumo.getStockActual().compareTo(BigDecimal.ZERO) > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "No se puede eliminar el insumo porque todavía tiene stock (" + insumo.getStockActual()
+                            + " " + insumo.getUnidadMedida() + "). Registrá un ajuste que lo lleve a cero antes de eliminarlo");
+        }
         if (movimientoStockRepository.existsByInsumoId(id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "No se puede eliminar el insumo porque registra movimientos de stock, compras o labores asociadas");

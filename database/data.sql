@@ -76,6 +76,21 @@ INSERT INTO compra_insumo (proveedor_id, usuario_id, fecha_compra, total_compra)
 INSERT INTO detalle_compra (compra_id, insumo_id, cantidad, precio_unitario, subtotal) VALUES
 (1, 1, 570.00, 55.00, 31350.00);
 
+-- Invariante (doc 03, sección 3.15): insumo.stock_actual = SUM(movimiento_stock.cantidad) de cada insumo.
+-- Los insumos sin compra registrada cargan su existencia como AJUSTE "Stock inicial", y cada
+-- labor_insumo CONSUMIDO tiene su EGRESO_LABOR correspondiente.
+--   Insumo 1: 570 - 120          =  450
+--   Insumo 2: 1440 - 240         = 1200
+--   Insumo 3: 3500               = 3500
+--   Insumo 4: 5308 - 165 - 143   = 5000
+--   Insumo 5: 45                 =   45
 INSERT INTO movimiento_stock (insumo_id, fecha, tipo, cantidad, usuario_id, labor_id, compra_id, observacion) VALUES
 (1, '2026-05-01 10:00:00', 'INGRESO_COMPRA', 570.00, 1, NULL, 1, 'Compra inicial de temporada'),
-(1, '2026-05-10 18:00:00', 'EGRESO_LABOR', -120.00, 2, 1, NULL, 'Consumo en labor de siembra Lote Norte');
+(1, '2026-05-10 18:00:00', 'EGRESO_LABOR', -120.00, 2, 1, NULL, 'Consumo en labor de siembra Lote Norte'),
+(2, '2026-05-01 08:00:00', 'AJUSTE', 1440.00, 1, NULL, NULL, 'Stock inicial'),
+(3, '2026-05-01 08:00:00', 'AJUSTE', 3500.00, 1, NULL, NULL, 'Stock inicial'),
+(4, '2026-05-01 08:00:00', 'AJUSTE', 5308.00, 1, NULL, NULL, 'Stock inicial'),
+(5, '2026-05-01 08:00:00', 'AJUSTE', 45.00, 1, NULL, NULL, 'Stock inicial'),
+(4, '2026-05-10 18:00:00', 'EGRESO_LABOR', -165.00, 2, 1, NULL, 'Gasoil consumido en labor de siembra Lote Norte'),
+(2, '2026-06-20 15:30:00', 'EGRESO_LABOR', -240.00, 2, 2, NULL, 'Herbicida aplicado en pulverización Lote Norte'),
+(4, '2026-06-20 15:30:00', 'EGRESO_LABOR', -143.00, 2, 2, NULL, 'Gasoil consumido en pulverización Lote Norte');

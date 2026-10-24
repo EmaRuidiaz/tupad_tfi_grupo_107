@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +15,7 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -30,6 +32,9 @@ class InsumoControllerTests {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private String bearer(String username) throws Exception {
         String body = mockMvc.perform(post("/api/auth/login")
@@ -241,6 +246,28 @@ class InsumoControllerTests {
         // Intentar eliminar insumo semilla #1 (con compras, labores y movimientos) -> 409 Conflict
         mockMvc.perform(delete("/api/insumos/1").header("Authorization", tokenAdmin))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void noSePuedeEliminarUnInsumoQueTodaviaTieneStock() throws Exception {
+        // Insumo 3 (Fertilizante SolMix): 3500 L en stock, sin labores asociadas
+        mockMvc.perform(delete("/api/insumos/3").header("Authorization", bearer("admin")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(containsString("todavía tiene stock")));
+
+        mockMvc.perform(get("/api/insumos/3").header("Authorization", bearer("admin")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void datosSemillaCumplenInvarianteStockActualIgualASumaDeMovimientos() {
+        Integer inconsistentes = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM insumo i
+                WHERE i.stock_actual <> COALESCE(
+                    (SELECT SUM(m.cantidad) FROM movimiento_stock m WHERE m.insumo_id = i.id), 0)
+                """, Integer.class);
+        assertEquals(0, inconsistentes,
+                "Todo insumo debe cumplir stock_actual = SUM(movimiento_stock.cantidad) (doc 03, sección 3.15)");
     }
 
     @Test
