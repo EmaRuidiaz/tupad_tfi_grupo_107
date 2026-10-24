@@ -1,0 +1,253 @@
+package com.grupo107.agtech;
+
+import com.grupo107.agtech.repository.MovimientoStockRepository;
+import com.jayway.jsonpath.JsonPath;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.lang.reflect.Method;
+import java.util.Arrays;
+
+import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+/**
+ * Tests de integración para HU-04 (Gestión de Inventario, Alertas y Movimientos de Stock).
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+class InsumoControllerTests {
+
+    private static final String PASSWORD = "agtech123";
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    private String bearer(String username) throws Exception {
+        String body = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + username + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return "Bearer " + JsonPath.read(body, "$.token");
+    }
+
+    @Test
+    void cualquierRolAutenticadoPuedeListarInsumosYVerIndicadorDeStockCritico() throws Exception {
+        // En data.sql hay 5 insumos: el #5 (Fungicida Curalotodo Pro) tiene stock_actual=45 <= stock_minimo_alerta=80
+        // y el #2 (Glifosato) tiene stock_actual=1200, stock_reservado=170 -> stockDisponible=1030
+        for (String user : new String[]{"admin", "agronomo1", "operario1"}) {
+            mockMvc.perform(get("/api/insumos").header("Authorization", bearer(user)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$", hasSize(5)))
+                    .andExpect(jsonPath("$[1].nombre").value("Glifosato Roundup Control 48%"))
+                    .andExpect(jsonPath("$[1].stockActual").value(1200.0))
+                    .andExpect(jsonPath("$[1].stockReservado").value(170.0))
+                    .andExpect(jsonPath("$[1].stockDisponible").value(1030.0))
+                    .andExpect(jsonPath("$[1].stockCritico").value(false))
+                    .andExpect(jsonPath("$[4].nombre").value("Fungicida Curalotodo Pro"))
+                    .andExpect(jsonPath("$[4].stockActual").value(45.0))
+                    .andExpect(jsonPath("$[4].stockMinimoAlerta").value(80.0))
+                    .andExpect(jsonPath("$[4].stockCritico").value(true));
+        }
+    }
+
+    @Test
+    void filtroStockCriticoDevuelveSoloInsumosEnAlerta() throws Exception {
+        mockMvc.perform(get("/api/insumos")
+                        .param("stockCritico", "true")
+                        .header("Authorization", bearer("agronomo1")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].nombre").value("Fungicida Curalotodo Pro"))
+                .andExpect(jsonPath("$[0].stockCritico").value(true));
+    }
+
+    @Test
+    void crearInsumoConStockInicialRegistraMovimientoDeStockInicialAutomatico() throws Exception {
+        String tokenAdmin = bearer("admin");
+
+        String response = mockMvc.perform(post("/api/insumos")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nombre": "Urea Granulada 46%",
+                                  "categoria": "FERTILIZANTE",
+                                  "unidadMedida": "BOLSAS",
+                                  "stockInicial": 200.00,
+                                  "stockMinimoAlerta": 50.00,
+                                  "precioUnitario": 42.50
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNumber())
+                .andExpect(jsonPath("$.nombre").value("Urea Granulada 46%"))
+                .andExpect(jsonPath("$.stockActual").value(200.0))
+                .andExpect(jsonPath("$.stockReservado").value(0.0))
+                .andExpect(jsonPath("$.stockDisponible").value(200.0))
+                .andExpect(jsonPath("$.stockCritico").value(false))
+                .andReturn().getResponse().getContentAsString();
+
+        Integer idCreado = JsonPath.read(response, "$.id");
+
+        // Debe haberse generado el movimiento AJUSTE "Stock inicial" con el usuario admin
+        mockMvc.perform(get("/api/insumos/" + idCreado + "/movimientos")
+                        .header("Authorization", tokenAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].tipo").value("AJUSTE"))
+                .andExpect(jsonPath("$[0].cantidad").value(200.0))
+                .andExpect(jsonPath("$[0].usuarioUsername").value("admin"))
+                .andExpect(jsonPath("$[0].observacion").value("Stock inicial"));
+    }
+
+    @Test
+    void agronomoYOperarioReciben403AlIntentarCrearEditarEliminarOAjustarInsumos() throws Exception {
+        String payload = """
+                {
+                  "nombre": "Insumo No Autorizado",
+                  "categoria": "SEMILLA",
+                  "unidadMedida": "BOLSAS",
+                  "stockInicial": 10,
+                  "stockMinimoAlerta": 5,
+                  "precioUnitario": 100
+                }
+                """;
+
+        for (String user : new String[]{"agronomo1", "operario1"}) {
+            String token = bearer(user);
+            mockMvc.perform(post("/api/insumos").header("Authorization", token)
+                            .contentType(MediaType.APPLICATION_JSON).content(payload))
+                    .andExpect(status().isForbidden());
+
+            mockMvc.perform(put("/api/insumos/1").header("Authorization", token)
+                            .contentType(MediaType.APPLICATION_JSON).content(payload))
+                    .andExpect(status().isForbidden());
+
+            mockMvc.perform(delete("/api/insumos/1").header("Authorization", token))
+                    .andExpect(status().isForbidden());
+
+            mockMvc.perform(post("/api/insumos/1/ajustes").header("Authorization", token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"cantidad\":10,\"observacion\":\"Intento no autorizado\"}"))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    @Test
+    void actualizarInsumoModificaCatalogoYUmbralSinAlterarStockFisico() throws Exception {
+        String tokenAdmin = bearer("admin");
+
+        // El insumo 1 tiene stock_actual = 450.00. Si subimos stockMinimoAlerta a 500, pasa a stockCritico = true
+        mockMvc.perform(put("/api/insumos/1")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nombre": "Semilla Soja Don Mario 46i20 Editada",
+                                  "categoria": "SEMILLA",
+                                  "unidadMedida": "BOLSAS",
+                                  "stockMinimoAlerta": 500.00,
+                                  "precioUnitario": 60.00
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value("Semilla Soja Don Mario 46i20 Editada"))
+                .andExpect(jsonPath("$.stockActual").value(450.0))
+                .andExpect(jsonPath("$.stockMinimoAlerta").value(500.0))
+                .andExpect(jsonPath("$.precioUnitario").value(60.0))
+                .andExpect(jsonPath("$.stockCritico").value(true));
+    }
+
+    @Test
+    void ajusteDeStockActualizaStockActualYRegistraAuditoriasValidaRestricciones() throws Exception {
+        String tokenAdmin = bearer("admin");
+
+        // 1. Ajuste válido positivo sobre insumo 5 (stock 45 + 50 = 95 > mínimo 80 -> sale de stock crítico)
+        mockMvc.perform(post("/api/insumos/5/ajustes")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cantidad\": 50.00, \"observacion\": \"Recuento físico de depósito\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tipo").value("AJUSTE"))
+                .andExpect(jsonPath("$.cantidad").value(50.0))
+                .andExpect(jsonPath("$.usuarioUsername").value("admin"))
+                .andExpect(jsonPath("$.observacion").value("Recuento físico de depósito"));
+
+        mockMvc.perform(get("/api/insumos/5").header("Authorization", tokenAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stockActual").value(95.0))
+                .andExpect(jsonPath("$.stockCritico").value(false));
+
+        // 2. Rechazo si no se envía observación (RF-03 criterio 4)
+        mockMvc.perform(post("/api/insumos/5/ajustes")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cantidad\": -10.00, \"observacion\": \"   \"}"))
+                .andExpect(status().isBadRequest());
+
+        // 3. Rechazo si el ajuste deja stock negativo
+        mockMvc.perform(post("/api/insumos/5/ajustes")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cantidad\": -500.00, \"observacion\": \"Baja excesiva\"}"))
+                .andExpect(status().isBadRequest());
+
+        // 4. Rechazo si el ajuste deja stock_actual por debajo de stock_reservado (insumo 2: actual 1200, reservado 170)
+        mockMvc.perform(post("/api/insumos/2/ajustes")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cantidad\": -1100.00, \"observacion\": \"Comprometería stock reservado\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void eliminarInsumoSinReferenciasDevuelve204YConReferenciasDevuelve409() throws Exception {
+        String tokenAdmin = bearer("admin");
+
+        // Crear insumo con stockInicial = 0 (sin movimientos ni referencias)
+        String body = mockMvc.perform(post("/api/insumos")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nombre": "Insumo Temporal",
+                                  "categoria": "COMBUSTIBLE",
+                                  "unidadMedida": "LITROS",
+                                  "stockInicial": 0,
+                                  "stockMinimoAlerta": 10,
+                                  "precioUnitario": 1.5
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Integer idTemporal = JsonPath.read(body, "$.id");
+
+        mockMvc.perform(delete("/api/insumos/" + idTemporal).header("Authorization", tokenAdmin))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/insumos/" + idTemporal).header("Authorization", tokenAdmin))
+                .andExpect(status().isNotFound());
+
+        // Intentar eliminar insumo semilla #1 (con compras, labores y movimientos) -> 409 Conflict
+        mockMvc.perform(delete("/api/insumos/1").header("Authorization", tokenAdmin))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void repositorioDeMovimientosNoExponeOperacionesDeBorradoPorInmutabilidadRN09() {
+        boolean tieneDelete = Arrays.stream(MovimientoStockRepository.class.getMethods())
+                .map(Method::getName)
+                .anyMatch(name -> name.startsWith("delete"));
+        assertFalse(tieneDelete, "MovimientoStockRepository no debe exponer operaciones delete (RN-09)");
+    }
+}

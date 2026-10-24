@@ -1,0 +1,17 @@
+package com.grupo107.agtech.controller.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+
+import java.math.BigDecimal;
+
+@Data
+public class AjusteStockRequest {
+
+    @NotNull(message = "La cantidad del ajuste es obligatoria")
+    private BigDecimal cantidad;
+
+    @NotBlank(message = "La observación es obligatoria para un ajuste de stock")
+    private String observacion;
+}
