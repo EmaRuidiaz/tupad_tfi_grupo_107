@@ -3,6 +3,7 @@ package com.grupo107.agtech.controller;
 import com.grupo107.agtech.controller.dto.CambioEstadoMaquinariaRequest;
 import com.grupo107.agtech.controller.dto.MaquinariaRequest;
 import com.grupo107.agtech.controller.dto.MaquinariaResponse;
+import com.grupo107.agtech.model.EstadoMaquinaria;
 import com.grupo107.agtech.service.MaquinariaService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -24,8 +25,9 @@ public class MaquinariaController {
     }
 
     @GetMapping
-    public List<MaquinariaResponse> listar() {
-        return maquinariaService.listarTodas();
+    public List<MaquinariaResponse> listar(@RequestParam(required = false) EstadoMaquinaria estado,
+                                           @RequestParam(required = false) Boolean mantenimientoVencido) {
+        return maquinariaService.listar(estado, mantenimientoVencido);
     }
 
     @GetMapping("/{id}")

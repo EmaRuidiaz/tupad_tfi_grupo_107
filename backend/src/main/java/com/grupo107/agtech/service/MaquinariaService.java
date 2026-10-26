@@ -27,8 +27,10 @@ public class MaquinariaService {
     }
 
     @Transactional(readOnly = true)
-    public List<MaquinariaResponse> listarTodas() {
+    public List<MaquinariaResponse> listar(EstadoMaquinaria estado, Boolean mantenimientoVencido) {
         return maquinariaRepository.findAllByOrderByIdAsc().stream()
+                .filter(m -> estado == null || m.getEstado() == estado)
+                .filter(m -> mantenimientoVencido == null || m.isMantenimientoVencido() == mantenimientoVencido)
                 .map(MaquinariaResponse::from)
                 .toList();
     }
@@ -50,6 +52,11 @@ public class MaquinariaService {
                 ? request.getHorasUsoActuales()
                 : BigDecimal.ZERO;
 
+        if (request.getHorasParaProximoService().compareTo(horasIniciales) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Las horas para el próximo service deben ser mayores a las horas de uso iniciales");
+        }
+
         Maquinaria m = new Maquinaria();
         m.setNombre(request.getNombre().trim());
         m.setTipo(request.getTipo());
@@ -66,6 +73,12 @@ public class MaquinariaService {
     @Transactional
     public MaquinariaResponse actualizar(Long id, MaquinariaRequest request) {
         Maquinaria m = buscarMaquinariaParaActualizar(id);
+
+        if (m.getEstado() == EstadoMaquinaria.EN_LABOR) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "No se puede modificar una maquinaria mientras está asignada a una labor en ejecución");
+        }
+
         String matricula = request.getMatriculaOSerie().trim();
 
         if (maquinariaRepository.existsByMatriculaOSerieIgnoreCaseAndIdNot(matricula, id)) {
@@ -77,6 +90,17 @@ public class MaquinariaService {
         m.setTipo(request.getTipo());
         m.setMatriculaOSerie(matricula);
         if (request.getHorasUsoActuales() != null) {
+            if (request.getHorasUsoActuales().compareTo(m.getHorasUsoActuales()) < 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "El horómetro actual no puede reducirse por debajo del valor registrado (" + m.getHorasUsoActuales() + " hs)");
+            }
+            BigDecimal maxHorasService = jdbcTemplate.queryForObject(
+                    "SELECT COALESCE(MAX(horas_maquina_en_service), 0) FROM registro_mantenimiento WHERE maquinaria_id = ?",
+                    BigDecimal.class, id);
+            if (maxHorasService != null && request.getHorasUsoActuales().compareTo(maxHorasService) < 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "El horómetro no puede ser menor al último service registrado (" + maxHorasService + " hs)");
+            }
             m.setHorasUsoActuales(request.getHorasUsoActuales());
         }
         m.setHorasParaProximoService(request.getHorasParaProximoService());
@@ -95,7 +119,7 @@ public class MaquinariaService {
             return MaquinariaResponse.from(m);
         }
 
-        validarTransicionManual(actual, nuevoEstado, esAdmin);
+        validarTransicionManual(m, actual, nuevoEstado, esAdmin);
         m.setEstado(nuevoEstado);
 
         return MaquinariaResponse.from(maquinariaRepository.save(m));
@@ -129,7 +153,7 @@ public class MaquinariaService {
         }
     }
 
-    private void validarTransicionManual(EstadoMaquinaria origen, EstadoMaquinaria destino, boolean esAdmin) {
+    private void validarTransicionManual(Maquinaria m, EstadoMaquinaria origen, EstadoMaquinaria destino, boolean esAdmin) {
         if (destino == EstadoMaquinaria.EN_LABOR || origen == EstadoMaquinaria.EN_LABOR) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "El estado EN_LABOR sólo es asignado automáticamente al iniciar o completar una labor");
@@ -160,6 +184,10 @@ public class MaquinariaService {
             if (!esAdmin) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Para volver a OPERATIVO desde EN_MANTENIMIENTO debe registrarse el service correspondiente");
+            }
+            if (m.isMantenimientoVencido()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "No se puede volver a OPERATIVO una maquinaria con el service vencido; actualice el próximo umbral de service o registre el mantenimiento");
             }
             return;
         }
