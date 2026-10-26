@@ -101,19 +101,19 @@ curl -X POST http://localhost:8080/api/insumos/5/ajustes \
 
 | Método | Endpoint | Roles | Descripción |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/maquinarias` | Todos | Lista todas las maquinarias ordenadas por `id` |
+| `GET` | `/api/maquinarias` | Todos | Lista todas las maquinarias ordenadas por `id`. Admite filtros opcionales: `?estado=OPERATIVO` y `?mantenimientoVencido=true` |
 | `GET` | `/api/maquinarias/{id}` | Todos | Detalle de una maquinaria |
-| `POST` | `/api/maquinarias` | `ADMIN` | Alta de maquinaria (inicia en estado `OPERATIVO`) |
-| `PUT` | `/api/maquinarias/{id}` | `ADMIN` | Modifica datos, horómetro, umbral de service, consumo y costo por hora |
-| `PATCH` | `/api/maquinarias/{id}/estado` | Todos (según transición) | Cambio de estado controlado (`OPERATIVO` ↔ `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO`) |
+| `POST` | `/api/maquinarias` | `ADMIN` | Alta de maquinaria (inicia en estado `OPERATIVO`; `horasParaProximoService` debe ser mayor a las horas iniciales) |
+| `PUT` | `/api/maquinarias/{id}` | `ADMIN` | Modifica datos, horómetro, umbral de service, consumo y costo. Protegido si está `EN_LABOR` y el horómetro no puede reducirse |
+| `PATCH` | `/api/maquinarias/{id}/estado` | Todos (según transición) | Cambio de estado controlado (`OPERATIVO` ↔ `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO`). Bloquea regreso a `OPERATIVO` si el service está vencido |
 | `DELETE` | `/api/maquinarias/{id}` | `ADMIN` | Baja física. Rechazada (`409`) si está `EN_LABOR` o registra labores/mantenimientos |
 
 Cada respuesta incluye los campos derivados `horasRestantesService` (`horasParaProximoService - horasUsoActuales`) y `mantenimientoVencido` (`horasUsoActuales >= horasParaProximoService`, RN-06).
 
 **Reglas que aplica el backend:**
-* `matriculaOSerie` es única (sin distinguir mayúsculas/minúsculas).
+* `matriculaOSerie` es única (sin distinguir mayúsculas/minúsculas). En el alta se exige `horasParaProximoService > horasUsoActuales`. En `PUT`, el horómetro no puede reducirse por debajo del actual ni del último service registrado.
 * Transiciones de estado (RN-08): cualquier rol puede ingresar una máquina `OPERATIVO` a `EN_MANTENIMIENTO`; sólo `ADMIN` puede dar de baja lógica (`FUERA_DE_SERVICIO`), reingresar de `FUERA_DE_SERVICIO` a `EN_MANTENIMIENTO` o volver manualmente de `EN_MANTENIMIENTO` a `OPERATIVO` sin registrar service. El estado `EN_LABOR` es exclusivo del ciclo de ejecución de labores (RN-10).
-* Si la maquinaria tiene historial de labores o mantenimientos asociados, se bloquea su eliminación física (`409 Conflict`) sugiriendo su paso a `FUERA_DE_SERVICIO`.
+* Si la maquinaria está en ejecución (`EN_LABOR`) no se puede modificar ni eliminar (`409 Conflict`). Si tiene historial de labores o mantenimientos asociados, se bloquea su eliminación física (`409 Conflict`) sugiriendo su paso a `FUERA_DE_SERVICIO`.
 
 ## Configuración útil
 
