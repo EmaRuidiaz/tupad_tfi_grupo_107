@@ -97,6 +97,24 @@ curl -X POST http://localhost:8080/api/insumos/5/ajustes \
 | Insumo inexistente | `404` |
 | Baja de un insumo con stock, movimientos o labores asociadas | `409` |
 
+## Parque de maquinaria (HU-05)
+
+| Método | Endpoint | Roles | Descripción |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/maquinarias` | Todos | Lista todas las maquinarias ordenadas por `id` |
+| `GET` | `/api/maquinarias/{id}` | Todos | Detalle de una maquinaria |
+| `POST` | `/api/maquinarias` | `ADMIN` | Alta de maquinaria (inicia en estado `OPERATIVO`) |
+| `PUT` | `/api/maquinarias/{id}` | `ADMIN` | Modifica datos, horómetro, umbral de service, consumo y costo por hora |
+| `PATCH` | `/api/maquinarias/{id}/estado` | Todos (según transición) | Cambio de estado controlado (`OPERATIVO` ↔ `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO`) |
+| `DELETE` | `/api/maquinarias/{id}` | `ADMIN` | Baja física. Rechazada (`409`) si está `EN_LABOR` o registra labores/mantenimientos |
+
+Cada respuesta incluye los campos derivados `horasRestantesService` (`horasParaProximoService - horasUsoActuales`) y `mantenimientoVencido` (`horasUsoActuales >= horasParaProximoService`, RN-06).
+
+**Reglas que aplica el backend:**
+* `matriculaOSerie` es única (sin distinguir mayúsculas/minúsculas).
+* Transiciones de estado (RN-08): cualquier rol puede ingresar una máquina `OPERATIVO` a `EN_MANTENIMIENTO`; sólo `ADMIN` puede dar de baja lógica (`FUERA_DE_SERVICIO`), reingresar de `FUERA_DE_SERVICIO` a `EN_MANTENIMIENTO` o volver manualmente de `EN_MANTENIMIENTO` a `OPERATIVO` sin registrar service. El estado `EN_LABOR` es exclusivo del ciclo de ejecución de labores (RN-10).
+* Si la maquinaria tiene historial de labores o mantenimientos asociados, se bloquea su eliminación física (`409 Conflict`) sugiriendo su paso a `FUERA_DE_SERVICIO`.
+
 ## Configuración útil
 
 | Variable | Default | Uso |
