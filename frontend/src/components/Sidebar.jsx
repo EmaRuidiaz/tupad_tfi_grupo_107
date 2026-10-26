@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { menuItems } from '../routes/menuItems.js'
 
-function Sidebar({ abierto, onNavegar }) {
+function Sidebar({ abierto, onNavegar, sesion, onCerrarSesion }) {
   return (
     <aside className={`sidebar ${abierto ? 'sidebar--abierto' : ''}`}>
       <div className="sidebar__marca">
@@ -9,7 +9,7 @@ function Sidebar({ abierto, onNavegar }) {
         <span>AgTech</span>
       </div>
 
-      <nav>
+      <nav className="sidebar__nav">
         <ul className="sidebar__menu">
           {menuItems.map((item) => (
             <li key={item.path}>
@@ -27,6 +27,22 @@ function Sidebar({ abierto, onNavegar }) {
           ))}
         </ul>
       </nav>
+
+      {sesion && (
+        <div className="sidebar__usuario">
+          <div className="sidebar__usuario-info">
+            <span className="sidebar__usuario-nombre">{sesion.username}</span>
+            <span className="sidebar__usuario-rol">{sesion.rol}</span>
+          </div>
+          <button
+            type="button"
+            className="sidebar__salir"
+            onClick={onCerrarSesion}
+          >
+            Cerrar sesión
+          </button>
+        </div>
+      )}
     </aside>
   )
 }

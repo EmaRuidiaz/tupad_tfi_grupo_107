@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout.jsx'
+import Login from './pages/Login.jsx'
 import Inicio from './pages/Inicio.jsx'
 import Lotes from './pages/Lotes.jsx'
 import Insumos from './pages/Insumos.jsx'
@@ -13,6 +14,7 @@ import NoEncontrado from './pages/NoEncontrado.jsx'
 function App() {
   return (
     <Routes>
+      <Route path="/login" element={<Login />} />
       <Route element={<MainLayout />}>
         <Route index element={<Inicio />} />
         <Route path="lotes" element={<Lotes />} />

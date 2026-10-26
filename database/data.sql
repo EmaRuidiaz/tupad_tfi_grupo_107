@@ -78,4 +78,11 @@ INSERT INTO detalle_compra (compra_id, insumo_id, cantidad, precio_unitario, sub
 
 INSERT INTO movimiento_stock (insumo_id, fecha, tipo, cantidad, usuario_id, labor_id, compra_id, observacion) VALUES
 (1, '2026-05-01 10:00:00', 'INGRESO_COMPRA', 570.00, 1, NULL, 1, 'Compra inicial de temporada'),
-(1, '2026-05-10 18:00:00', 'EGRESO_LABOR', -120.00, 2, 1, NULL, 'Consumo en labor de siembra Lote Norte');
+(1, '2026-05-10 18:00:00', 'EGRESO_LABOR', -120.00, 2, 1, NULL, 'Consumo en labor de siembra Lote Norte'),
+(2, '2026-05-01 08:00:00', 'AJUSTE', 1440.00, 1, NULL, NULL, 'Stock inicial'),
+(3, '2026-05-01 08:00:00', 'AJUSTE', 3500.00, 1, NULL, NULL, 'Stock inicial'),
+(4, '2026-05-01 08:00:00', 'AJUSTE', 5308.00, 1, NULL, NULL, 'Stock inicial'),
+(5, '2026-05-01 08:00:00', 'AJUSTE', 45.00, 1, NULL, NULL, 'Stock inicial'),
+(4, '2026-05-10 18:00:00', 'EGRESO_LABOR', -165.00, 2, 1, NULL, 'Gasoil consumido en labor de siembra Lote Norte'),
+(2, '2026-06-20 15:30:00', 'EGRESO_LABOR', -240.00, 2, 2, NULL, 'Herbicida aplicado en pulverización Lote Norte'),
+(4, '2026-06-20 15:30:00', 'EGRESO_LABOR', -143.00, 2, 2, NULL, 'Gasoil consumido en pulverización Lote Norte');
