@@ -1,11 +1,13 @@
 package com.grupo107.agtech;
 
 import com.jayway.jsonpath.JsonPath;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +24,12 @@ class MaquinariaControllerTests {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private EntityManager entityManager;
 
     private String bearer(String username) throws Exception {
         String body = mockMvc.perform(post("/api/auth/login")
@@ -242,5 +250,143 @@ class MaquinariaControllerTests {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("próximo service")));
+    }
+
+    @Test
+    void filtrosPorEstadoYMantenimientoVencidoFuncionan() throws Exception {
+        String tokenAdmin = bearer("admin");
+
+        mockMvc.perform(get("/api/maquinarias")
+                        .param("estado", "OPERATIVO")
+                        .header("Authorization", tokenAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(3)));
+
+        mockMvc.perform(get("/api/maquinarias")
+                        .param("mantenimientoVencido", "true")
+                        .header("Authorization", tokenAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+
+        mockMvc.perform(put("/api/maquinarias/1")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nombre": "Tractor John Deere 6110M",
+                                  "tipo": "TRACTOR",
+                                  "matriculaOSerie": "JD-6110M-2022-01",
+                                  "horasUsoActuales": 1050.00,
+                                  "horasParaProximoService": 1000.00,
+                                  "consumoLitrosHora": 16.50,
+                                  "costoOperativoHora": 48.00
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/maquinarias")
+                        .param("mantenimientoVencido", "true")
+                        .header("Authorization", tokenAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].matriculaOSerie").value("JD-6110M-2022-01"));
+    }
+
+    @Test
+    void altaRechazaHorasProximoServiceMenorOIgualAHorasActuales() throws Exception {
+        String tokenAdmin = bearer("admin");
+
+        mockMvc.perform(post("/api/maquinarias")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nombre": "Cosechadora Usada",
+                                  "tipo": "COSECHADORA",
+                                  "matriculaOSerie": "COS-USADA-01",
+                                  "horasUsoActuales": 1200.00,
+                                  "horasParaProximoService": 1000.00,
+                                  "consumoLitrosHora": 30.00,
+                                  "costoOperativoHora": 90.00
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("mayores a las horas de uso iniciales")));
+    }
+
+    @Test
+    void actualizarRechazaReducirHorometroOModificarEnLabor() throws Exception {
+        String tokenAdmin = bearer("admin");
+
+        mockMvc.perform(put("/api/maquinarias/1")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nombre": "Tractor John Deere 6110M",
+                                  "tipo": "TRACTOR",
+                                  "matriculaOSerie": "JD-6110M-2022-01",
+                                  "horasUsoActuales": 900.00,
+                                  "horasParaProximoService": 1000.00,
+                                  "consumoLitrosHora": 16.50,
+                                  "costoOperativoHora": 48.00
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("no puede reducirse")));
+
+        jdbcTemplate.update("UPDATE maquinaria SET estado = 'EN_LABOR' WHERE id = 1");
+        entityManager.clear();
+
+        mockMvc.perform(put("/api/maquinarias/1")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nombre": "Tractor John Deere 6110M",
+                                  "tipo": "TRACTOR",
+                                  "matriculaOSerie": "JD-6110M-2022-01",
+                                  "horasUsoActuales": 985.00,
+                                  "horasParaProximoService": 1000.00,
+                                  "consumoLitrosHora": 16.50,
+                                  "costoOperativoHora": 48.00
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(containsString("labor en ejecución")));
+    }
+
+    @Test
+    void transicionHaciaOperativoConMantenimientoVencidoDevuelve409() throws Exception {
+        String tokenAdmin = bearer("admin");
+
+        mockMvc.perform(put("/api/maquinarias/1")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nombre": "Tractor John Deere 6110M",
+                                  "tipo": "TRACTOR",
+                                  "matriculaOSerie": "JD-6110M-2022-01",
+                                  "horasUsoActuales": 1010.00,
+                                  "horasParaProximoService": 1000.00,
+                                  "consumoLitrosHora": 16.50,
+                                  "costoOperativoHora": 48.00
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patch("/api/maquinarias/1/estado")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\": \"EN_MANTENIMIENTO\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patch("/api/maquinarias/1/estado")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\": \"OPERATIVO\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(containsString("service vencido")));
     }
 }
