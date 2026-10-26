@@ -1,7 +1,16 @@
 import { apiFetch } from './api.js'
 
-export function listarMaquinarias() {
-  return apiFetch('/maquinarias')
+export function listarMaquinarias(filtros = {}) {
+  const params = new URLSearchParams()
+  if (filtros.estado) params.append('estado', filtros.estado)
+  if (
+    filtros.mantenimientoVencido !== undefined &&
+    filtros.mantenimientoVencido !== null
+  ) {
+    params.append('mantenimientoVencido', String(filtros.mantenimientoVencido))
+  }
+  const query = params.toString() ? `?${params.toString()}` : ''
+  return apiFetch(`/maquinarias${query}`)
 }
 
 export function obtenerMaquinaria(id) {

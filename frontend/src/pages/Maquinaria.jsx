@@ -34,12 +34,16 @@ function Maquinaria() {
   const [busqueda, setBusqueda] = useState('')
   const [tipoFiltro, setTipoFiltro] = useState('TODOS')
   const [estadoFiltro, setEstadoFiltro] = useState('TODOS')
-  const [soloVencidos, setSoloVencidos] = useState(false)
+  const [soloAlertas, setSoloAlertas] = useState(false)
 
   const [modalFormulario, setModalFormulario] = useState(null)
   const [maquinariaAEliminar, setMaquinariaAEliminar] = useState(null)
   const [eliminando, setEliminando] = useState(false)
   const [errorEliminacion, setErrorEliminacion] = useState('')
+
+  const [maquinariaABajar, setMaquinariaABajar] = useState(null)
+  const [bajando, setBajando] = useState(false)
+  const [errorBaja, setErrorBaja] = useState('')
 
   const recargarMaquinarias = useCallback(async () => {
     setErrorGlobal('')
@@ -84,13 +88,22 @@ function Maquinaria() {
     const serviceVencido = maquinarias.filter(
       (m) => m.mantenimientoVencido,
     ).length
-    return { total, operativas, serviceVencido }
+    const serviceProximo = maquinarias.filter(
+      (m) => !m.mantenimientoVencido && Number(m.horasRestantesService) <= 50,
+    ).length
+    return { total, operativas, serviceVencido, serviceProximo }
   }, [maquinarias])
 
   const maquinariasFiltradas = useMemo(() => {
     const texto = busqueda.trim().toLowerCase()
     return maquinarias.filter((item) => {
-      if (soloVencidos && !item.mantenimientoVencido) return false
+      if (
+        soloAlertas &&
+        !item.mantenimientoVencido &&
+        Number(item.horasRestantesService) > 50
+      ) {
+        return false
+      }
       if (tipoFiltro !== 'TODOS' && item.tipo !== tipoFiltro) return false
       if (estadoFiltro !== 'TODOS' && item.estado !== estadoFiltro) return false
       if (
@@ -102,7 +115,7 @@ function Maquinaria() {
       }
       return true
     })
-  }, [maquinarias, soloVencidos, tipoFiltro, estadoFiltro, busqueda])
+  }, [maquinarias, soloAlertas, tipoFiltro, estadoFiltro, busqueda])
 
   async function manejarCambioEstado(maquinaria, nuevoEstado) {
     setErrorGlobal('')
@@ -115,6 +128,25 @@ function Maquinaria() {
       await recargarMaquinarias()
     } catch (err) {
       setErrorGlobal(err.message || 'No se pudo cambiar el estado.')
+    }
+  }
+
+  async function confirmarBaja() {
+    if (!maquinariaABajar) return
+    setBajando(true)
+    setErrorBaja('')
+    try {
+      await cambiarEstadoMaquinaria(maquinariaABajar.id, 'FUERA_DE_SERVICIO')
+      const nombre = maquinariaABajar.nombre
+      setMaquinariaABajar(null)
+      setMensajeExito(
+        `Maquinaria "${nombre}" dada de baja lógica (Fuera de servicio).`,
+      )
+      await recargarMaquinarias()
+    } catch (err) {
+      setErrorBaja(err.message || 'No se pudo dar de baja la maquinaria.')
+    } finally {
+      setBajando(false)
     }
   }
 
@@ -182,14 +214,26 @@ function Maquinaria() {
         </div>
 
         <div
-          className={`tarjeta-kpi ${resumen.serviceVencido > 0 ? 'tarjeta-kpi--alerta' : ''}`}
+          className={`tarjeta-kpi ${
+            resumen.serviceVencido > 0
+              ? 'tarjeta-kpi--alerta'
+              : resumen.serviceProximo > 0
+                ? 'tarjeta-kpi--info'
+                : ''
+          }`}
         >
-          <span className="tarjeta-kpi__titulo">Service alcanzado</span>
+          <span className="tarjeta-kpi__titulo">Atención de service</span>
           <strong className="tarjeta-kpi__valor">
-            {resumen.serviceVencido}
+            {resumen.serviceVencido > 0
+              ? `${resumen.serviceVencido} vencido${resumen.serviceVencido > 1 ? 's' : ''}`
+              : `${resumen.serviceProximo} próximo${resumen.serviceProximo > 1 ? 's' : ''}`}
           </strong>
           <span className="tarjeta-kpi__detalle">
-            Superaron las horas para el próximo service
+            {resumen.serviceVencido > 0
+              ? `${resumen.serviceVencido} superaron el umbral (${resumen.serviceProximo} a menos de 50 hs)`
+              : resumen.serviceProximo > 0
+                ? `${resumen.serviceProximo} a menos de 50 hs del próximo service`
+                : 'Todas las unidades dentro de sus horas de service'}
           </span>
         </div>
       </div>
@@ -246,10 +290,13 @@ function Maquinaria() {
         <label className="check-filtro">
           <input
             type="checkbox"
-            checked={soloVencidos}
-            onChange={(e) => setSoloVencidos(e.target.checked)}
+            checked={soloAlertas}
+            onChange={(e) => setSoloAlertas(e.target.checked)}
           />
-          <span>Solo service vencido ({resumen.serviceVencido})</span>
+          <span>
+            Solo alertas de service (
+            {resumen.serviceVencido + resumen.serviceProximo})
+          </span>
         </label>
       </div>
 
@@ -278,7 +325,13 @@ function Maquinaria() {
               {maquinariasFiltradas.map((item) => (
                 <tr
                   key={item.id}
-                  className={item.mantenimientoVencido ? 'fila--critica' : ''}
+                  className={
+                    item.mantenimientoVencido
+                      ? 'fila--critica'
+                      : Number(item.horasRestantesService) <= 50
+                        ? 'fila--alerta'
+                        : ''
+                  }
                 >
                   <td>
                     <strong>{item.nombre}</strong>
@@ -301,6 +354,14 @@ function Maquinaria() {
                     {item.mantenimientoVencido ? (
                       <span className="etiqueta etiqueta--critica">
                         ⚠️ Service vencido
+                      </span>
+                    ) : Number(item.horasRestantesService) <= 50 ? (
+                      <span
+                        className="etiqueta etiqueta--advertencia"
+                        title="Restan pocas horas de uso para el próximo service"
+                      >
+                        ⚡ Próximo (restan{' '}
+                        {formatearNumero(item.horasRestantesService)} hs)
                       </span>
                     ) : (
                       <span className="texto-suave texto-chico">
@@ -364,9 +425,11 @@ function Maquinaria() {
                             <button
                               type="button"
                               className="btn btn--secundario btn--chico"
-                              onClick={() =>
-                                manejarCambioEstado(item, 'FUERA_DE_SERVICIO')
-                              }
+                              onClick={() => {
+                                setMensajeExito('')
+                                setErrorBaja('')
+                                setMaquinariaABajar(item)
+                              }}
                             >
                               Dar de baja
                             </button>
@@ -435,6 +498,28 @@ function Maquinaria() {
           }
         }}
         onConfirmar={confirmarEliminar}
+      />
+
+      <ConfirmModal
+        abierto={Boolean(maquinariaABajar)}
+        titulo="Dar de baja maquinaria"
+        mensaje={
+          maquinariaABajar
+            ? `¿Confirmás pasar a Fuera de servicio a "${maquinariaABajar.nombre}" (${maquinariaABajar.matriculaOSerie})?`
+            : ''
+        }
+        detalle="La maquinaria quedará inhabilitada para ser asignada a labores agrícolas hasta que un administrador decida reingresarla a taller."
+        textoConfirmar="Dar de baja"
+        textoCargando="Dando de baja..."
+        cargando={bajando}
+        error={errorBaja}
+        onCancelar={() => {
+          if (!bajando) {
+            setMaquinariaABajar(null)
+            setErrorBaja('')
+          }
+        }}
+        onConfirmar={confirmarBaja}
       />
     </section>
   )

@@ -37,14 +37,32 @@ function MaquinariaFormModal({ maquinaria, onCerrar, onGuardado }) {
   async function manejarSubmit(e) {
     e.preventDefault()
     setError('')
+
+    const horasActualesNum = Number(form.horasUsoActuales || 0)
+    const horasProximoNum = Number(form.horasParaProximoService)
+
+    if (horasProximoNum <= horasActualesNum) {
+      setError(
+        'Las horas para el próximo service deben ser mayores a las horas de uso actuales.',
+      )
+      return
+    }
+
+    if (maquinaria && horasActualesNum < Number(maquinaria.horasUsoActuales ?? 0)) {
+      setError(
+        `El horómetro actual (${horasActualesNum} hs) no puede reducirse por debajo del valor registrado (${maquinaria.horasUsoActuales} hs).`,
+      )
+      return
+    }
+
     setGuardando(true)
 
     const payload = {
       nombre: form.nombre.trim(),
       tipo: form.tipo,
       matriculaOSerie: form.matriculaOSerie.trim(),
-      horasUsoActuales: Number(form.horasUsoActuales || 0),
-      horasParaProximoService: Number(form.horasParaProximoService),
+      horasUsoActuales: horasActualesNum,
+      horasParaProximoService: horasProximoNum,
       consumoLitrosHora: Number(form.consumoLitrosHora),
       costoOperativoHora: Number(form.costoOperativoHora),
     }
@@ -126,6 +144,7 @@ function MaquinariaFormModal({ maquinaria, onCerrar, onGuardado }) {
               type="number"
               step="0.01"
               min="0"
+              max="99999999.99"
               required
               value={form.horasUsoActuales}
               onChange={(e) =>
@@ -141,6 +160,7 @@ function MaquinariaFormModal({ maquinaria, onCerrar, onGuardado }) {
               type="number"
               step="0.01"
               min="0.01"
+              max="99999999.99"
               required
               value={form.horasParaProximoService}
               onChange={(e) =>
@@ -158,6 +178,7 @@ function MaquinariaFormModal({ maquinaria, onCerrar, onGuardado }) {
               type="number"
               step="0.01"
               min="0"
+              max="999999.99"
               required
               value={form.consumoLitrosHora}
               onChange={(e) =>
@@ -173,6 +194,7 @@ function MaquinariaFormModal({ maquinaria, onCerrar, onGuardado }) {
               type="number"
               step="0.01"
               min="0"
+              max="99999999.99"
               required
               value={form.costoOperativoHora}
               onChange={(e) =>

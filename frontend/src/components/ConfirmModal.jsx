@@ -6,11 +6,16 @@ function ConfirmModal({
   mensaje,
   detalle,
   textoConfirmar = 'Eliminar',
+  textoCargando,
   cargando = false,
   error = '',
   onCancelar,
   onConfirmar,
 }) {
+  const cargandoTexto =
+    textoCargando ||
+    (textoConfirmar === 'Eliminar' ? 'Eliminando...' : 'Procesando...')
+
   return (
     <Modal abierto={abierto} titulo={titulo} onCerrar={onCancelar}>
       {error && (
@@ -41,7 +46,7 @@ function ConfirmModal({
           onClick={onConfirmar}
           disabled={cargando}
         >
-          {cargando ? 'Eliminando...' : textoConfirmar}
+          {cargando ? cargandoTexto : textoConfirmar}
         </button>
       </div>
     </Modal>

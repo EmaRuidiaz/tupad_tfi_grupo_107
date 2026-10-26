@@ -342,6 +342,10 @@ a {
   background-color: #fff5f5;
 }
 
+.fila--alerta {
+  background-color: #fffdf5;
+}
+
 .acciones-celda {
   display: flex;
   flex-wrap: wrap;
@@ -363,6 +367,12 @@ a {
   background-color: var(--color-peligro-fondo);
   color: var(--color-peligro);
   border: 1px solid var(--color-alerta-borde);
+}
+
+.etiqueta--advertencia {
+  background-color: #fff8e1;
+  color: #b78103;
+  border: 1px solid #ffe082;
 }
 
 .etiqueta--ok {
