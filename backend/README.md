@@ -162,17 +162,20 @@ Cada respuesta incluye los campos derivados `horasRestantesService` (`horasParaP
 | `GET` | `/api/reglas-climaticas/{id}` | Todos | Detalle de una regla climática |
 | `POST` | `/api/reglas-climaticas` | `ADMIN` | Alta de regla para un tipo de labor sin regla configurada |
 | `PUT` | `/api/reglas-climaticas/{id}` | `ADMIN` | Modifica umbrales de viento, temperatura, lluvia, humedad y mensaje de alerta |
-| `DELETE` | `/api/reglas-climaticas/{id}` | `ADMIN` | Elimina una regla climática del catálogo |
+| `DELETE` | `/api/reglas-climaticas/{id}` | `ADMIN` | Elimina una regla climática (rechazada con `409` si existen labores pendientes de ese tipo) |
+| `POST` | `/api/reglas-climaticas/{id}/evaluar` | Todos | Evalúa variables meteorológicas contra la regla e informa si aprueba (`APROBADA_CLIMA`) o bloquea (`BLOQUEADA_CLIMA`) con el detalle de incumplimientos |
 
 **Reglas que aplica el backend (doc 03, sección 3.8 y RN-01):**
 * Existe a lo sumo una regla por `tipoLabor` (`PULVERIZACION`, `SIEMBRA`, `COSECHA`, `FERTILIZACION`). Las labores de `LABRANZA` no llevan regla climática asociada y se rechazan con `400`.
 * Se valida `vientoMinKmh <= vientoMaxKmh`, `tempMinC < tempMaxC`, porcentajes (`probLluviaMaxPct`, `humedadMinPct`) entre `0` y `100` y precisión `DECIMAL(5, 2)`.
+* Si existen labores agrícolas en estado `PLANIFICADA`, `APROBADA_CLIMA` o `BLOQUEADA_CLIMA` para ese `tipoLabor`, se impide eliminar la regla o cambiar su tipo (`409 Conflict`).
 
 | Situación | Respuesta |
 | :--- | :--- |
 | Umbrales inválidos (`vientoMin > vientoMax`, `tempMin >= tempMax`), porcentajes fuera de `0..100`, `LABRANZA` o `tipoLabor` duplicado | `400` |
 | Modificación por un usuario no `ADMIN` | `403` |
 | Regla climática inexistente | `404` |
+| Baja o cambio de `tipoLabor` con labores pendientes asociadas | `409` |
 
 ## Configuración útil
 

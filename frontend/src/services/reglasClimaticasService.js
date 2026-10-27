@@ -30,3 +30,10 @@ export function eliminarReglaClimatica(id) {
     method: 'DELETE',
   })
 }
+
+export function evaluarReglaClimatica(id, payload) {
+  return apiFetch(`/reglas-climaticas/${id}/evaluar`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}

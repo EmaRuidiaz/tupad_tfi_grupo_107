@@ -94,7 +94,7 @@ class ReglaClimaticaControllerTests {
     }
 
     @Test
-    void adminPuedeEditarEliminarYVolverACrearUnaReglaClimatica() throws Exception {
+    void adminPuedeEditarEliminarReglaSinLaboresPendientesYRechazaCon409SiTieneLaboresPendientes() throws Exception {
         String tokenAdmin = bearer("admin");
 
         mockMvc.perform(put("/api/reglas-climaticas/1")
@@ -107,6 +107,10 @@ class ReglaClimaticaControllerTests {
                 .andExpect(jsonPath("$.vientoMaxKmh").value(14.5))
                 .andExpect(jsonPath("$.humedadMinPct").value(45.0))
                 .andExpect(jsonPath("$.mensajeAlerta").value("Riesgo alto de deriva por viento o baja humedad."));
+
+        mockMvc.perform(delete("/api/reglas-climaticas/1").header("Authorization", tokenAdmin))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(containsString("labores pendientes")));
 
         mockMvc.perform(delete("/api/reglas-climaticas/4").header("Authorization", tokenAdmin))
                 .andExpect(status().isNoContent());
@@ -136,7 +140,7 @@ class ReglaClimaticaControllerTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("Ya existe una regla climática")));
 
-        mockMvc.perform(put("/api/reglas-climaticas/1")
+        mockMvc.perform(put("/api/reglas-climaticas/3")
                         .header("Authorization", tokenAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(reglaJson("SIEMBRA", "2", "15", "10", "30", "20", "40", "Colisión con siembra")))
@@ -188,5 +192,45 @@ class ReglaClimaticaControllerTests {
                                 "Precisión inválida")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("3 enteros y 2 decimales")));
+    }
+
+    @Test
+    void evaluarCondicionesClimaticasContraReglaInformaAprobacionOIncumplimientos() throws Exception {
+        String tokenAgronomo = bearer("agronomo1");
+
+        mockMvc.perform(post("/api/reglas-climaticas/1/evaluar")
+                        .header("Authorization", tokenAgronomo)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "vientoVelocidadKmh": 10.0,
+                                  "temperaturaC": 22.0,
+                                  "probabilidadLluviaPct": 5.0,
+                                  "humedadRelativaPct": 55.0
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tipoLabor").value("PULVERIZACION"))
+                .andExpect(jsonPath("$.aprobada").value(true))
+                .andExpect(jsonPath("$.estadoLaborSugerido").value("APROBADA_CLIMA"))
+                .andExpect(jsonPath("$.incumplimientos", hasSize(0)))
+                .andExpect(jsonPath("$.mensajeAlerta").doesNotExist());
+
+        mockMvc.perform(post("/api/reglas-climaticas/1/evaluar")
+                        .header("Authorization", tokenAgronomo)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "vientoVelocidadKmh": 19.5,
+                                  "temperaturaC": 35.0,
+                                  "probabilidadLluviaPct": 25.0,
+                                  "humedadRelativaPct": 30.0
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.aprobada").value(false))
+                .andExpect(jsonPath("$.estadoLaborSugerido").value("BLOQUEADA_CLIMA"))
+                .andExpect(jsonPath("$.incumplimientos", hasSize(4)))
+                .andExpect(jsonPath("$.mensajeAlerta").value(containsString("deriva peligrosa")));
     }
 }

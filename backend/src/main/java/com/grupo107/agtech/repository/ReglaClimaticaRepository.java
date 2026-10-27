@@ -26,4 +26,7 @@ public interface ReglaClimaticaRepository extends JpaRepository<ReglaClimatica, 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM ReglaClimatica r WHERE r.id = :id")
     Optional<ReglaClimatica> findByIdForUpdate(@Param("id") Long id);
+
+    @Query(value = "SELECT COUNT(*) FROM labor_agricola WHERE tipo_labor = :tipoLabor AND estado IN ('PLANIFICADA', 'APROBADA_CLIMA', 'BLOQUEADA_CLIMA')", nativeQuery = true)
+    long contarLaboresPendientesPorTipo(@Param("tipoLabor") String tipoLabor);
 }

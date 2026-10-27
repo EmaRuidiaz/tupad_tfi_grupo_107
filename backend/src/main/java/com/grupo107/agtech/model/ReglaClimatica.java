@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "regla_climatica")
@@ -42,4 +44,32 @@ public class ReglaClimatica {
 
     @Column(name = "mensaje_alerta", nullable = false, length = 255)
     private String mensajeAlerta;
+
+    public List<String> evaluar(BigDecimal vientoKmh,
+                                BigDecimal temperaturaC,
+                                BigDecimal probLluviaPct,
+                                BigDecimal humedadPct) {
+        List<String> incumplimientos = new ArrayList<>();
+
+        if (vientoKmh.compareTo(vientoMinKmh) < 0) {
+            incumplimientos.add("Viento (" + vientoKmh + " km/h) inferior al mínimo requerido (" + vientoMinKmh + " km/h)");
+        }
+        if (vientoKmh.compareTo(vientoMaxKmh) > 0) {
+            incumplimientos.add("Viento (" + vientoKmh + " km/h) supera el máximo permitido (" + vientoMaxKmh + " km/h)");
+        }
+        if (temperaturaC.compareTo(tempMinC) < 0) {
+            incumplimientos.add("Temperatura (" + temperaturaC + " °C) inferior a la mínima permitida (" + tempMinC + " °C)");
+        }
+        if (temperaturaC.compareTo(tempMaxC) > 0) {
+            incumplimientos.add("Temperatura (" + temperaturaC + " °C) supera la máxima permitida (" + tempMaxC + " °C)");
+        }
+        if (probLluviaPct.compareTo(probLluviaMaxPct) > 0) {
+            incumplimientos.add("Probabilidad de lluvia (" + probLluviaPct + " %) supera el máximo permitido (" + probLluviaMaxPct + " %)");
+        }
+        if (humedadPct.compareTo(humedadMinPct) < 0) {
+            incumplimientos.add("Humedad relativa (" + humedadPct + " %) inferior a la mínima requerida (" + humedadMinPct + " %)");
+        }
+
+        return incumplimientos;
+    }
 }

@@ -1,5 +1,7 @@
 package com.grupo107.agtech.controller;
 
+import com.grupo107.agtech.controller.dto.EvaluacionClimaRequest;
+import com.grupo107.agtech.controller.dto.EvaluacionClimaResponse;
 import com.grupo107.agtech.controller.dto.ReglaClimaticaRequest;
 import com.grupo107.agtech.controller.dto.ReglaClimaticaResponse;
 import com.grupo107.agtech.model.TipoLabor;
@@ -51,5 +53,11 @@ public class ReglaClimaticaController {
     public ResponseEntity<Void> eliminar(@PathVariable Long id) {
         reglaClimaticaService.eliminar(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/evaluar")
+    public EvaluacionClimaResponse evaluar(@PathVariable Long id,
+                                           @Valid @RequestBody EvaluacionClimaRequest request) {
+        return reglaClimaticaService.evaluar(id, request);
     }
 }

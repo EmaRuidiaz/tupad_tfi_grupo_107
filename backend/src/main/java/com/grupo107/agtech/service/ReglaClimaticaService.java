@@ -1,5 +1,7 @@
 package com.grupo107.agtech.service;
 
+import com.grupo107.agtech.controller.dto.EvaluacionClimaRequest;
+import com.grupo107.agtech.controller.dto.EvaluacionClimaResponse;
 import com.grupo107.agtech.controller.dto.ReglaClimaticaRequest;
 import com.grupo107.agtech.controller.dto.ReglaClimaticaResponse;
 import com.grupo107.agtech.model.ReglaClimatica;
@@ -57,6 +59,13 @@ public class ReglaClimaticaService {
         ReglaClimatica regla = buscarReglaParaActualizar(id);
         validarReglasNegocio(request);
 
+        if (regla.getTipoLabor() != request.getTipoLabor()
+                && reglaClimaticaRepository.contarLaboresPendientesPorTipo(regla.getTipoLabor().name()) > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "No se puede cambiar el tipo de labor de la regla porque existen labores pendientes de tipo "
+                            + regla.getTipoLabor());
+        }
+
         if (reglaClimaticaRepository.existsByTipoLaborAndIdNot(request.getTipoLabor(), id)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Ya existe otra regla climática configurada para el tipo de labor: " + request.getTipoLabor());
@@ -69,8 +78,27 @@ public class ReglaClimaticaService {
     @Transactional
     public void eliminar(Long id) {
         ReglaClimatica regla = buscarReglaParaActualizar(id);
+
+        if (reglaClimaticaRepository.contarLaboresPendientesPorTipo(regla.getTipoLabor().name()) > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "No se puede eliminar la regla climática de " + regla.getTipoLabor()
+                            + " porque existen labores pendientes de validación climática de ese tipo");
+        }
+
         reglaClimaticaRepository.delete(regla);
         reglaClimaticaRepository.flush();
+    }
+
+    @Transactional(readOnly = true)
+    public EvaluacionClimaResponse evaluar(Long id, EvaluacionClimaRequest request) {
+        ReglaClimatica regla = buscarRegla(id);
+        List<String> incumplimientos = regla.evaluar(
+                request.getVientoVelocidadKmh(),
+                request.getTemperaturaC(),
+                request.getProbabilidadLluviaPct(),
+                request.getHumedadRelativaPct()
+        );
+        return EvaluacionClimaResponse.from(regla, incumplimientos);
     }
 
     private void validarReglasNegocio(ReglaClimaticaRequest request) {

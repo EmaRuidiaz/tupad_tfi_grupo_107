@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import ReglaClimaticaFormModal from '../components/reglas/ReglaClimaticaFormModal.jsx'
+import SimuladorClimaModal from '../components/reglas/SimuladorClimaModal.jsx'
 import { getSession, isAdmin } from '../services/api.js'
 import {
   eliminarReglaClimatica,
@@ -25,6 +26,7 @@ function ReglasClimaticas() {
   const [tipoFiltro, setTipoFiltro] = useState('TODOS')
 
   const [modalFormulario, setModalFormulario] = useState(null)
+  const [reglaASimular, setReglaASimular] = useState(null)
   const [reglaAEliminar, setReglaAEliminar] = useState(null)
   const [eliminando, setEliminando] = useState(false)
   const [errorEliminacion, setErrorEliminacion] = useState('')
@@ -146,7 +148,7 @@ function ReglasClimaticas() {
             </button>
           ) : (
             <span className="etiqueta etiqueta--info">
-              Modo consulta ({sesion?.rol})
+              Modo consulta y simulación ({sesion?.rol})
             </span>
           )}
         </div>
@@ -245,7 +247,7 @@ function ReglasClimaticas() {
                 <th className="texto-derecha">Lluvia máx.</th>
                 <th className="texto-derecha">Humedad mín.</th>
                 <th>Mensaje de alerta</th>
-                {puedeEditar && <th>Acciones</th>}
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -282,33 +284,43 @@ function ReglasClimaticas() {
                     </span>
                   </td>
                   <td>{item.mensajeAlerta}</td>
-                  {puedeEditar && (
-                    <td>
-                      <div className="acciones-celda">
-                        <button
-                          type="button"
-                          className="btn btn--secundario btn--chico"
-                          onClick={() => {
-                            setMensajeExito('')
-                            setModalFormulario({ regla: item })
-                          }}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn--peligro btn--chico"
-                          onClick={() => {
-                            setMensajeExito('')
-                            setErrorEliminacion('')
-                            setReglaAEliminar(item)
-                          }}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </td>
-                  )}
+                  <td>
+                    <div className="acciones-celda">
+                      <button
+                        type="button"
+                        className="btn btn--secundario btn--chico"
+                        onClick={() => setReglaASimular(item)}
+                      >
+                        Simular clima
+                      </button>
+
+                      {puedeEditar && (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn--secundario btn--chico"
+                            onClick={() => {
+                              setMensajeExito('')
+                              setModalFormulario({ regla: item })
+                            }}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--peligro btn--chico"
+                            onClick={() => {
+                              setMensajeExito('')
+                              setErrorEliminacion('')
+                              setReglaAEliminar(item)
+                            }}
+                          >
+                            Eliminar
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -329,6 +341,13 @@ function ReglasClimaticas() {
         />
       )}
 
+      {reglaASimular && (
+        <SimuladorClimaModal
+          regla={reglaASimular}
+          onCerrar={() => setReglaASimular(null)}
+        />
+      )}
+
       <ConfirmModal
         abierto={Boolean(reglaAEliminar)}
         titulo="Eliminar regla climática"
@@ -337,7 +356,7 @@ function ReglasClimaticas() {
             ? `¿Confirmás la eliminación de la regla climática para "${etiquetaTipoLabor(reglaAEliminar.tipoLabor)}"?`
             : ''
         }
-        detalle="Podrás volver a registrar los umbrales para este tipo de labor desde el botón «+ Nueva regla»."
+        detalle="Solo se permite eliminar reglas sin labores pendientes de validación climática. Podrás volver a registrar los umbrales desde «+ Nueva regla»."
         cargando={eliminando}
         error={errorEliminacion}
         onCancelar={() => {
