@@ -154,6 +154,26 @@ Cada respuesta incluye los campos derivados `horasRestantesService` (`horasParaP
 | Maquinaria inexistente | `404` |
 | Transición de estado no permitida, edición/baja en labor o baja con historial asociado | `409` |
 
+## Reglas climáticas agronómicas (HU-07)
+
+| Método | Endpoint | Roles | Descripción |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/reglas-climaticas` | Todos | Lista las reglas climáticas ordenadas por `id`. Admite `?tipoLabor=PULVERIZACION` |
+| `GET` | `/api/reglas-climaticas/{id}` | Todos | Detalle de una regla climática |
+| `POST` | `/api/reglas-climaticas` | `ADMIN` | Alta de regla para un tipo de labor sin regla configurada |
+| `PUT` | `/api/reglas-climaticas/{id}` | `ADMIN` | Modifica umbrales de viento, temperatura, lluvia, humedad y mensaje de alerta |
+| `DELETE` | `/api/reglas-climaticas/{id}` | `ADMIN` | Elimina una regla climática del catálogo |
+
+**Reglas que aplica el backend (doc 03, sección 3.8 y RN-01):**
+* Existe a lo sumo una regla por `tipoLabor` (`PULVERIZACION`, `SIEMBRA`, `COSECHA`, `FERTILIZACION`). Las labores de `LABRANZA` no llevan regla climática asociada y se rechazan con `400`.
+* Se valida `vientoMinKmh <= vientoMaxKmh`, `tempMinC < tempMaxC`, porcentajes (`probLluviaMaxPct`, `humedadMinPct`) entre `0` y `100` y precisión `DECIMAL(5, 2)`.
+
+| Situación | Respuesta |
+| :--- | :--- |
+| Umbrales inválidos (`vientoMin > vientoMax`, `tempMin >= tempMax`), porcentajes fuera de `0..100`, `LABRANZA` o `tipoLabor` duplicado | `400` |
+| Modificación por un usuario no `ADMIN` | `403` |
+| Regla climática inexistente | `404` |
+
 ## Configuración útil
 
 | Variable | Default | Uso |
