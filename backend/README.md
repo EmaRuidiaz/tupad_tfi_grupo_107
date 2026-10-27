@@ -143,9 +143,16 @@ curl -X PATCH http://localhost:8080/api/lotes/1/estado \
 Cada respuesta incluye los campos derivados `horasRestantesService` (`horasParaProximoService - horasUsoActuales`) y `mantenimientoVencido` (`horasUsoActuales >= horasParaProximoService`, RN-06).
 
 **Reglas que aplica el backend:**
-* `matriculaOSerie` es única (sin distinguir mayúsculas/minúsculas). En el alta se exige `horasParaProximoService > horasUsoActuales`. En `PUT`, el horómetro no puede reducirse por debajo del actual ni del último service registrado.
+* `matriculaOSerie` es única (sin distinguir mayúsculas/minúsculas). En el alta se exige `horasParaProximoService > horasUsoActuales`. En `PUT`, el horómetro no puede reducirse por debajo del actual ni del último service registrado, y `horasParaProximoService` debe ser mayor al último service registrado.
 * Transiciones de estado (RN-08): cualquier rol puede ingresar una máquina `OPERATIVO` a `EN_MANTENIMIENTO`; sólo `ADMIN` puede dar de baja lógica (`FUERA_DE_SERVICIO`), reingresar de `FUERA_DE_SERVICIO` a `EN_MANTENIMIENTO` o volver manualmente de `EN_MANTENIMIENTO` a `OPERATIVO` sin registrar service. El estado `EN_LABOR` es exclusivo del ciclo de ejecución de labores (RN-10).
 * Si la maquinaria está en ejecución (`EN_LABOR`) no se puede modificar ni eliminar (`409 Conflict`). Si tiene historial de labores o mantenimientos asociados, se bloquea su eliminación física (`409 Conflict`) sugiriendo su paso a `FUERA_DE_SERVICIO`.
+
+| Situación | Respuesta |
+| :--- | :--- |
+| Validación de campos, matrícula duplicada, reducción de horómetro o umbral inválido | `400` |
+| Cambio de estado reservado al administrador | `403` |
+| Maquinaria inexistente | `404` |
+| Transición de estado no permitida, edición/baja en labor o baja con historial asociado | `409` |
 
 ## Configuración útil
 

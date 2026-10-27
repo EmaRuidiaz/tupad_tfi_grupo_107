@@ -19,6 +19,7 @@ function claseEstado(estado) {
   if (estado === 'OPERATIVO') return 'etiqueta etiqueta--ok'
   if (estado === 'FUERA_DE_SERVICIO') return 'etiqueta etiqueta--critica'
   if (estado === 'EN_MANTENIMIENTO') return 'etiqueta etiqueta--info'
+  if (estado === 'EN_LABOR') return 'etiqueta etiqueta--advertencia'
   return 'etiqueta'
 }
 
@@ -382,6 +383,12 @@ function Maquinaria() {
                   </td>
                   <td>
                     <div className="acciones-celda">
+                      {item.estado === 'EN_LABOR' && (
+                        <span className="texto-suave texto-chico">
+                          En labor activa
+                        </span>
+                      )}
+
                       {item.estado === 'OPERATIVO' && (
                         <button
                           type="button"
@@ -394,7 +401,7 @@ function Maquinaria() {
                         </button>
                       )}
 
-                      {puedeEditar && (
+                      {puedeEditar && item.estado !== 'EN_LABOR' && (
                         <>
                           {item.estado === 'EN_MANTENIMIENTO' && (
                             <button

@@ -7,7 +7,6 @@ import com.grupo107.agtech.model.Maquinaria;
 import com.grupo107.agtech.repository.MaquinariaRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -19,17 +18,17 @@ import java.util.List;
 public class MaquinariaService {
 
     private final MaquinariaRepository maquinariaRepository;
-    private final JdbcTemplate jdbcTemplate;
 
-    public MaquinariaService(MaquinariaRepository maquinariaRepository, JdbcTemplate jdbcTemplate) {
+    public MaquinariaService(MaquinariaRepository maquinariaRepository) {
         this.maquinariaRepository = maquinariaRepository;
-        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Transactional(readOnly = true)
     public List<MaquinariaResponse> listar(EstadoMaquinaria estado, Boolean mantenimientoVencido) {
-        return maquinariaRepository.findAllByOrderByIdAsc().stream()
-                .filter(m -> estado == null || m.getEstado() == estado)
+        List<Maquinaria> maquinarias = estado != null
+                ? maquinariaRepository.findByEstadoOrderByIdAsc(estado)
+                : maquinariaRepository.findAllByOrderByIdAsc();
+        return maquinarias.stream()
                 .filter(m -> mantenimientoVencido == null || m.isMantenimientoVencido() == mantenimientoVencido)
                 .map(MaquinariaResponse::from)
                 .toList();
@@ -86,6 +85,8 @@ public class MaquinariaService {
                     "Ya existe otra maquinaria registrada con la matrícula o serie: " + matricula);
         }
 
+        BigDecimal maxHorasService = maquinariaRepository.obtenerMaxHorasService(id);
+
         m.setNombre(request.getNombre().trim());
         m.setTipo(request.getTipo());
         m.setMatriculaOSerie(matricula);
@@ -94,14 +95,17 @@ public class MaquinariaService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "El horómetro actual no puede reducirse por debajo del valor registrado (" + m.getHorasUsoActuales() + " hs)");
             }
-            BigDecimal maxHorasService = jdbcTemplate.queryForObject(
-                    "SELECT COALESCE(MAX(horas_maquina_en_service), 0) FROM registro_mantenimiento WHERE maquinaria_id = ?",
-                    BigDecimal.class, id);
             if (maxHorasService != null && request.getHorasUsoActuales().compareTo(maxHorasService) < 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "El horómetro no puede ser menor al último service registrado (" + maxHorasService + " hs)");
             }
             m.setHorasUsoActuales(request.getHorasUsoActuales());
+        }
+        if (maxHorasService != null
+                && maxHorasService.compareTo(BigDecimal.ZERO) > 0
+                && request.getHorasParaProximoService().compareTo(maxHorasService) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Las horas para el próximo service deben ser mayores al último service registrado (" + maxHorasService + " hs)");
         }
         m.setHorasParaProximoService(request.getHorasParaProximoService());
         m.setConsumoLitrosHora(request.getConsumoLitrosHora());
@@ -134,12 +138,7 @@ public class MaquinariaService {
                     "No se puede eliminar una maquinaria que está asignada a una labor en ejecución");
         }
 
-        Integer mantenimientos = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM registro_mantenimiento WHERE maquinaria_id = ?", Integer.class, id);
-        Integer labores = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM labor_agricola WHERE maquinaria_id = ?", Integer.class, id);
-
-        if ((mantenimientos != null && mantenimientos > 0) || (labores != null && labores > 0)) {
+        if (maquinariaRepository.contarMantenimientos(id) > 0 || maquinariaRepository.contarLabores(id) > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "No se puede eliminar la maquinaria porque registra labores o mantenimientos asociados. Pasala a FUERA_DE_SERVICIO para darla de baja lógica");
         }
@@ -155,7 +154,7 @@ public class MaquinariaService {
 
     private void validarTransicionManual(Maquinaria m, EstadoMaquinaria origen, EstadoMaquinaria destino, boolean esAdmin) {
         if (destino == EstadoMaquinaria.EN_LABOR || origen == EstadoMaquinaria.EN_LABOR) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "El estado EN_LABOR sólo es asignado automáticamente al iniciar o completar una labor");
         }
 
@@ -182,7 +181,7 @@ public class MaquinariaService {
 
         if (origen == EstadoMaquinaria.EN_MANTENIMIENTO && destino == EstadoMaquinaria.OPERATIVO) {
             if (!esAdmin) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "Para volver a OPERATIVO desde EN_MANTENIMIENTO debe registrarse el service correspondiente");
             }
             if (m.isMantenimientoVencido()) {
@@ -192,7 +191,7 @@ public class MaquinariaService {
             return;
         }
 
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Transición de estado no permitida: " + origen + " -> " + destino);
     }
 

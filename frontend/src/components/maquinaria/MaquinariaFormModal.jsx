@@ -41,9 +41,9 @@ function MaquinariaFormModal({ maquinaria, onCerrar, onGuardado }) {
     const horasActualesNum = Number(form.horasUsoActuales || 0)
     const horasProximoNum = Number(form.horasParaProximoService)
 
-    if (horasProximoNum <= horasActualesNum) {
+    if (!maquinaria && horasProximoNum <= horasActualesNum) {
       setError(
-        'Las horas para el próximo service deben ser mayores a las horas de uso actuales.',
+        'Las horas para el próximo service deben ser mayores a las horas de uso iniciales.',
       )
       return
     }
@@ -203,6 +203,18 @@ function MaquinariaFormModal({ maquinaria, onCerrar, onGuardado }) {
             />
           </div>
         </div>
+
+        {maquinaria ? (
+          <p className="texto-suave texto-chico">
+            Nota: En la operatoria habitual, el horómetro se incrementa al
+            completar labores agrícolas y el próximo service se actualiza al
+            registrar un mantenimiento.
+          </p>
+        ) : (
+          <p className="texto-suave texto-chico">
+            La maquinaria se registra en estado &laquo;Operativo&raquo;.
+          </p>
+        )}
 
         <div className="modal__pie">
           <button

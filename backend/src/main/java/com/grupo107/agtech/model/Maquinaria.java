@@ -52,10 +52,6 @@ public class Maquinaria {
         return horasUsoActuales.compareTo(horasParaProximoService) >= 0;
     }
 
-    public boolean requiereService() {
-        return isMantenimientoVencido();
-    }
-
     public void sumarHoras(BigDecimal horas) {
         if (horas != null && horas.compareTo(BigDecimal.ZERO) > 0) {
             this.horasUsoActuales = this.horasUsoActuales.add(horas);

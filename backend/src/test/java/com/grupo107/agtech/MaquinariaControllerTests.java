@@ -158,6 +158,12 @@ class MaquinariaControllerTests {
         mockMvc.perform(patch("/api/maquinarias/3/estado")
                         .header("Authorization", tokenOperario)
                         .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\": \"OPERATIVO\"}"))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(patch("/api/maquinarias/3/estado")
+                        .header("Authorization", tokenOperario)
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\": \"FUERA_DE_SERVICIO\"}"))
                 .andExpect(status().isForbidden());
 
@@ -172,13 +178,13 @@ class MaquinariaControllerTests {
                         .header("Authorization", tokenAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\": \"OPERATIVO\"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isConflict());
 
         mockMvc.perform(patch("/api/maquinarias/3/estado")
                         .header("Authorization", tokenAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\": \"EN_LABOR\"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isConflict());
     }
 
     @Test
@@ -334,6 +340,23 @@ class MaquinariaControllerTests {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("no puede reducirse")));
+
+        mockMvc.perform(put("/api/maquinarias/1")
+                        .header("Authorization", tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nombre": "Tractor John Deere 6110M",
+                                  "tipo": "TRACTOR",
+                                  "matriculaOSerie": "JD-6110M-2022-01",
+                                  "horasUsoActuales": 985.00,
+                                  "horasParaProximoService": 750.00,
+                                  "consumoLitrosHora": 16.50,
+                                  "costoOperativoHora": 48.00
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("último service registrado")));
 
         jdbcTemplate.update("UPDATE maquinaria SET estado = 'EN_LABOR' WHERE id = 1");
         entityManager.clear();
