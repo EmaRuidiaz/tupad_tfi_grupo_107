@@ -97,6 +97,38 @@ curl -X POST http://localhost:8080/api/insumos/5/ajustes \
 | Insumo inexistente | `404` |
 | Baja de un insumo con stock, movimientos o labores asociadas | `409` |
 
+## Gestión de lotes (HU-03)
+
+| Método | Endpoint | Roles | Descripción |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/lotes` | Todos | Lista los lotes. `?estado=SEMBRADO` filtra por estado agronómico |
+| `GET` | `/api/lotes/{id}` | Todos | Detalle de un lote |
+| `POST` | `/api/lotes` | `ADMIN`, `AGRONOMO` | Alta. El lote queda en `EN_PREPARACION` y asociado al usuario del token |
+| `PUT` | `/api/lotes/{id}` | `ADMIN`, `AGRONOMO` | Modifica nombre, superficie, coordenadas, polígono, suelo y observaciones. **No** modifica el estado |
+| `DELETE` | `/api/lotes/{id}` | `ADMIN`, `AGRONOMO` | Baja. Rechazada (`409`) si el lote tiene labores o cosechas |
+| `PATCH` | `/api/lotes/{id}/estado` | `ADMIN`, `AGRONOMO` | Cambio de estado agronómico (`estado` + `observacion` opcional) |
+
+Cada respuesta de lote incluye `transicionesPermitidas`: los estados a los que se puede pasar manualmente desde el estado actual.
+
+**Reglas que aplica el backend:**
+* Nombre único (sin distinguir mayúsculas), superficie mayor a 0, latitud entre -90 y 90 y longitud entre -180 y 180 (RF-02).
+* `poligonoWkt` es opcional; si se envía debe ser `POLYGON((lon lat, lon lat, ...))` con anillos cerrados de al menos 4 puntos.
+* Transiciones de estado según doc 06, sección 6.3.1 (RN-08). `EN_PREPARACION -> SEMBRADO` y `LISTO_COSECHA -> COSECHADO` no se pueden hacer a mano: las realiza el sistema al completar una siembra o registrar una cosecha.
+* Volver a `EN_PREPARACION` desde `SEMBRADO` o `EN_CRECIMIENTO` es una pérdida total y requiere `observacion`. Toda observación del cambio se agrega a las observaciones del lote con fecha.
+
+```bash
+# Cambio de estado (requiere token de admin o agrónomo)
+curl -X PATCH http://localhost:8080/api/lotes/1/estado \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"estado": "EN_CRECIMIENTO"}'
+```
+
+| Situación | Respuesta |
+| :--- | :--- |
+| Validación de campos, nombre duplicado, polígono WKT inválido o pérdida total sin observación | `400` |
+| Lote inexistente | `404` |
+| Baja de un lote con labores o cosechas, o transición de estado no permitida | `409` |
+
 ## Configuración útil
 
 | Variable | Default | Uso |
