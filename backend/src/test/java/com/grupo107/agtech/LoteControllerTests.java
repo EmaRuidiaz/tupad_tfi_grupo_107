@@ -210,14 +210,12 @@ class LoteControllerTests {
                 .andExpect(jsonPath("$.estado").value("LISTO_COSECHA"))
                 .andExpect(jsonPath("$.transicionesPermitidas", hasSize(0)));
 
-        // LISTO_COSECHA -> COSECHADO sólo ocurre al registrar la cosecha (automático).
         mockMvc.perform(patch("/api/lotes/1/estado").header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"COSECHADO\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value(containsString("LISTO_COSECHA -> COSECHADO")));
 
-        // EN_PREPARACION -> SEMBRADO sólo ocurre al completar una labor de siembra (automático).
         mockMvc.perform(patch("/api/lotes/2/estado").header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"SEMBRADO\"}"))

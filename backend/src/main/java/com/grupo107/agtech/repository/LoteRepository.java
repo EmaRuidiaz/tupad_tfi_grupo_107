@@ -27,7 +27,6 @@ public interface LoteRepository extends JpaRepository<Lote, Long> {
     @Query("SELECT l FROM Lote l WHERE l.id = :id")
     Optional<Lote> findByIdForUpdate(@Param("id") Long id);
 
-    // Labores y cosechas todavía no tienen entidad JPA: se consultan con SQL nativo.
     @Query(value = "SELECT COUNT(*) FROM labor_agricola WHERE lote_id = :id", nativeQuery = true)
     long contarLabores(@Param("id") Long id);
 

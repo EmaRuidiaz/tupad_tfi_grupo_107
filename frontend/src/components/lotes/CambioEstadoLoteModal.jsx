@@ -3,7 +3,6 @@ import Modal from '../Modal.jsx'
 import { cambiarEstadoLote } from '../../services/lotesService.js'
 import { etiquetaEstadoLote } from '../../utils/formatters.js'
 
-// Volver a "En preparación" con el cultivo implantado es una pérdida total (doc 06, 6.3.1).
 function esPerdidaTotal(actual, destino) {
   return (
     (actual === 'SEMBRADO' || actual === 'EN_CRECIMIENTO') &&
@@ -12,7 +11,6 @@ function esPerdidaTotal(actual, destino) {
 }
 
 function CambioEstadoLoteModal({ lote, onCerrar, onGuardado }) {
-  // La pérdida total va al final para que no quede preseleccionada.
   const opciones = [...(lote.transicionesPermitidas ?? [])].sort(
     (a, b) =>
       Number(esPerdidaTotal(lote.estado, a)) -

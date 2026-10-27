@@ -28,7 +28,6 @@ public interface MaquinariaRepository extends JpaRepository<Maquinaria, Long> {
     @Query("SELECT m FROM Maquinaria m WHERE m.id = :id")
     Optional<Maquinaria> findByIdForUpdate(@Param("id") Long id);
 
-    // Mantenimientos y labores todavía no tienen entidad JPA: se consultan con SQL nativo.
     @Query(value = "SELECT COUNT(*) FROM registro_mantenimiento WHERE maquinaria_id = :id", nativeQuery = true)
     long contarMantenimientos(@Param("id") Long id);
 
