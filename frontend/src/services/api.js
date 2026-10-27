@@ -41,6 +41,13 @@ export function isAdmin() {
   return session?.rol === 'ADMIN' || session?.roles?.includes('ROLE_ADMIN')
 }
 
+export function tieneAlgunRol(...roles) {
+  const session = getSession()
+  return roles.some(
+    (rol) => session?.rol === rol || session?.roles?.includes(`ROLE_${rol}`),
+  )
+}
+
 export async function login(username, password) {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',

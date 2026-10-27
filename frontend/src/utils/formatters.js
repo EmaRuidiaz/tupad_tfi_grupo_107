@@ -12,6 +12,19 @@ export const UNIDADES_INSUMO = [
   { valor: 'TONELADAS', etiqueta: 'Toneladas' },
 ]
 
+export const ESTADOS_LOTE = [
+  { valor: 'EN_PREPARACION', etiqueta: 'En preparación' },
+  { valor: 'SEMBRADO', etiqueta: 'Sembrado' },
+  { valor: 'EN_CRECIMIENTO', etiqueta: 'En crecimiento' },
+  { valor: 'LISTO_COSECHA', etiqueta: 'Listo para cosecha' },
+  { valor: 'COSECHADO', etiqueta: 'Cosechado' },
+  { valor: 'DESCANSO', etiqueta: 'Descanso' },
+]
+
+export function etiquetaEstadoLote(valor) {
+  return ESTADOS_LOTE.find((e) => e.valor === valor)?.etiqueta ?? valor
+}
+
 export function formatearNumero(valor) {
   return Number(valor ?? 0).toLocaleString('es-AR', {
     minimumFractionDigits: 2,
