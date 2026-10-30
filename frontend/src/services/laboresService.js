@@ -20,6 +20,13 @@ export function programarLabor(payload) {
   })
 }
 
+export function actualizarLabor(id, payload) {
+  return apiFetch(`/labores/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function reprogramarLabor(id, payload) {
   return apiFetch(`/labores/${id}/reprogramar`, {
     method: 'PATCH',

@@ -58,7 +58,7 @@ function Labores() {
   const [tipoFiltro, setTipoFiltro] = useState('TODOS')
   const [estadoFiltro, setEstadoFiltro] = useState('TODOS')
 
-  const [modalNuevaLabor, setModalNuevaLabor] = useState(false)
+  const [modalFormulario, setModalFormulario] = useState(null)
   const [laborDetalle, setLaborDetalle] = useState(null)
   const [laborReprogramar, setLaborReprogramar] = useState(null)
   const [laborACancelar, setLaborACancelar] = useState(null)
@@ -196,7 +196,7 @@ function Labores() {
               className="btn btn--primario"
               onClick={() => {
                 setMensajeExito('')
-                setModalNuevaLabor(true)
+                setModalFormulario({ labor: null })
               }}
             >
               + Programar labor
@@ -439,6 +439,16 @@ function Labores() {
                               className="btn btn--secundario btn--chico"
                               onClick={() => {
                                 setMensajeExito('')
+                                setModalFormulario({ labor })
+                              }}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn--secundario btn--chico"
+                              onClick={() => {
+                                setMensajeExito('')
                                 setLaborReprogramar(labor)
                               }}
                             >
@@ -467,14 +477,16 @@ function Labores() {
         </div>
       )}
 
-      {modalNuevaLabor && (
+      {modalFormulario && (
         <LaborFormModal
+          labor={modalFormulario.labor}
           lotes={lotes}
           maquinarias={maquinarias}
           insumos={insumos}
-          onCerrar={() => setModalNuevaLabor(false)}
+          laboresExistentes={labores}
+          onCerrar={() => setModalFormulario(null)}
           onGuardado={async (mensaje) => {
-            setModalNuevaLabor(false)
+            setModalFormulario(null)
             setMensajeExito(mensaje)
             await recargarTodo()
           }}
