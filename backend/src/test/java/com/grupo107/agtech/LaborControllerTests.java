@@ -142,20 +142,80 @@ class LaborControllerTests {
     }
 
     @Test
-    void operarioRecibe403AlIntentarProgramarReprogramarOCancelarLabores() throws Exception {
-        String tokenOperario = bearer("operario1");
+    void editarLaborPendienteReemplazaReservasAtomicamenteYBloqueaEdicionDeLaborCompletada() throws Exception {
+        String tokenAgro = bearer("agronomo1");
 
-        mockMvc.perform(post("/api/labores")
-                        .header("Authorization", tokenOperario)
+        // Labor 3 tiene reservado insumo 2 (170 L). Editamos para usar 200 L de insumo 2 y 100 L de insumo 3.
+        mockMvc.perform(put("/api/labores/3")
+                        .header("Authorization", tokenAgro)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "loteId": 2,
+                                  "maquinariaId": 2,
+                                  "tipoLabor": "PULVERIZACION",
+                                  "fechaPlanificada": "2026-09-19T08:00:00",
+                                  "observaciones": "Dosis ajustada con coadyuvante",
+                                  "insumos": [
+                                    { "insumoId": 2, "cantidadUtilizada": 200.00 },
+                                    { "insumoId": 3, "cantidadUtilizada": 100.00 }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(3))
+                .andExpect(jsonPath("$.insumos", hasSize(2)))
+                .andExpect(jsonPath("$.insumos[0].cantidadUtilizada").value(200.0))
+                .andExpect(jsonPath("$.insumos[1].cantidadUtilizada").value(100.0));
+
+        // Insumo 2 pasa de 170 reservado a 200 reservado (disponible = 1000)
+        mockMvc.perform(get("/api/insumos/2").header("Authorization", tokenAgro))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stockReservado").value(200.0))
+                .andExpect(jsonPath("$.stockDisponible").value(1000.0));
+
+        // Insumo 3 pasa de 0 reservado a 100 reservado
+        mockMvc.perform(get("/api/insumos/3").header("Authorization", tokenAgro))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stockReservado").value(100.0));
+
+        // No se puede editar una labor COMPLETADA
+        mockMvc.perform(put("/api/labores/1")
+                        .header("Authorization", tokenAgro)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "loteId": 2,
                                   "tipoLabor": "LABRANZA",
-                                  "fechaPlanificada": "2026-10-30T09:00:00",
+                                  "fechaPlanificada": "2026-10-01T08:00:00",
                                   "insumos": []
                                 }
                                 """))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void operarioRecibe403AlIntentarProgramarEditarReprogramarOCancelarLabores() throws Exception {
+        String tokenOperario = bearer("operario1");
+        String body = """
+                {
+                  "loteId": 2,
+                  "tipoLabor": "LABRANZA",
+                  "fechaPlanificada": "2026-10-30T09:00:00",
+                  "insumos": []
+                }
+                """;
+
+        mockMvc.perform(post("/api/labores")
+                        .header("Authorization", tokenOperario)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(put("/api/labores/3")
+                        .header("Authorization", tokenOperario)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
                 .andExpect(status().isForbidden());
 
         mockMvc.perform(patch("/api/labores/3/reprogramar")
@@ -203,9 +263,26 @@ class LaborControllerTests {
     }
 
     @Test
-    void rechazaAsignarMaquinariaQueNoEstaOperativa() throws Exception {
+    void rechazaAsignarMaquinariaNoOperativaOConConflictoHorario() throws Exception {
         String tokenAgro = bearer("agronomo1");
 
+        // Labor 3 tiene maquinaria 2 el 2026-09-18 10:00:00. Intentar usar maquinaria 2 a las 11:00 da 409.
+        mockMvc.perform(post("/api/labores")
+                        .header("Authorization", tokenAgro)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "loteId": 1,
+                                  "maquinariaId": 2,
+                                  "tipoLabor": "PULVERIZACION",
+                                  "fechaPlanificada": "2026-09-18T11:00:00",
+                                  "insumos": []
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(containsString("ya está asignada a la orden pendiente #3")));
+
+        // Pasar maquinaria 1 a EN_MANTENIMIENTO impide asignarla
         mockMvc.perform(patch("/api/maquinarias/1/estado")
                         .header("Authorization", tokenAgro)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -229,9 +306,42 @@ class LaborControllerTests {
     }
 
     @Test
-    void loteEnDescansoPermiteLabranzaPeroRechazaOtrosTiposDeLabor() throws Exception {
+    void validaCoherenciaAgronomicaEntreEstadoDelLoteYTipoDeLabor() throws Exception {
         String tokenAgro = bearer("agronomo1");
 
+        // Lote 1 está SEMBRADO: no admite SIEMBRA, LABRANZA ni COSECHA
+        for (String tipoInvalido : new String[]{"SIEMBRA", "LABRANZA", "COSECHA"}) {
+            mockMvc.perform(post("/api/labores")
+                            .header("Authorization", tokenAgro)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                      "loteId": 1,
+                                      "tipoLabor": "%s",
+                                      "fechaPlanificada": "2026-11-03T08:00:00",
+                                      "insumos": []
+                                    }
+                                    """.formatted(tipoInvalido)))
+                    .andExpect(status().isConflict());
+        }
+
+        // Lote 3 está LISTO_COSECHA: admite COSECHA
+        mockMvc.perform(post("/api/labores")
+                        .header("Authorization", tokenAgro)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "loteId": 3,
+                                  "maquinariaId": 3,
+                                  "tipoLabor": "COSECHA",
+                                  "fechaPlanificada": "2026-11-03T08:00:00",
+                                  "insumos": []
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tipoLabor").value("COSECHA"));
+
+        // Lote en DESCANSO solo permite LABRANZA
         jdbcTemplate.update("UPDATE lote SET estado = 'DESCANSO' WHERE id = 2");
 
         mockMvc.perform(post("/api/labores")
@@ -240,7 +350,7 @@ class LaborControllerTests {
                         .content("""
                                 {
                                   "loteId": 2,
-                                  "tipoLabor": "SIEMBRA",
+                                  "tipoLabor": "PULVERIZACION",
                                   "fechaPlanificada": "2026-11-03T08:00:00",
                                   "insumos": []
                                 }
