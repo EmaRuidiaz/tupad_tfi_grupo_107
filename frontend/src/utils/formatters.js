@@ -48,6 +48,16 @@ export function etiquetaEstadoMaquinaria(estado) {
   return ESTADOS_MAQUINARIA.find((e) => e.valor === estado)?.etiqueta || estado
 }
 
+export const TIPOS_MANTENIMIENTO = [
+  { valor: 'PREVENTIVO_PROGRAMADO', etiqueta: 'Preventivo programado' },
+  { valor: 'CAMBIO_ACEITE_FILTROS', etiqueta: 'Cambio de aceite y filtros' },
+  { valor: 'CORRECTIVO_ROTURA', etiqueta: 'Correctivo por rotura' },
+]
+
+export function etiquetaTipoMantenimiento(tipo) {
+  return TIPOS_MANTENIMIENTO.find((t) => t.valor === tipo)?.etiqueta || tipo
+}
+
 export function formatearNumero(valor) {
   return Number(valor ?? 0).toLocaleString('es-AR', {
     minimumFractionDigits: 2,
@@ -61,4 +71,19 @@ export function formatearFecha(iso) {
     dateStyle: 'short',
     timeStyle: 'short',
   })
+}
+
+// Fechas sin hora (LocalDate "2026-03-10"): se formatean sin pasar por Date
+// para que la zona horaria no las corra un día.
+export function formatearFechaSimple(fecha) {
+  if (!fecha) return '-'
+  const [anio, mes, dia] = fecha.split('-')
+  return `${dia}/${mes}/${anio}`
+}
+
+export function fechaHoyIso() {
+  const hoy = new Date()
+  const mes = String(hoy.getMonth() + 1).padStart(2, '0')
+  const dia = String(hoy.getDate()).padStart(2, '0')
+  return `${hoy.getFullYear()}-${mes}-${dia}`
 }
