@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -52,6 +53,14 @@ public class LaborController {
             Authentication auth) {
         LaborResponse creada = laborService.programar(request, auth.getName());
         return ResponseEntity.status(HttpStatus.CREATED).body(creada);
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGRONOMO')")
+    public LaborResponse actualizar(
+            @PathVariable Long id,
+            @Valid @RequestBody LaborRequest request) {
+        return laborService.actualizar(id, request);
     }
 
     @PatchMapping("/{id}/reprogramar")
