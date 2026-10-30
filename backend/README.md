@@ -205,6 +205,29 @@ curl -X POST http://localhost:8080/api/maquinarias/1/mantenimientos \
 | Regla climática inexistente | `404` |
 | Baja o cambio de `tipoLabor` con labores pendientes asociadas | `409` |
 
+## Labores agrícolas — Planificación (HU-09)
+
+| Método | Endpoint | Roles | Descripción |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/labores` | Todos | Lista las órdenes de trabajo ordenadas por `fechaPlanificada DESC`. Admite `?loteId=`, `?estado=` y `?tipoLabor=` |
+| `GET` | `/api/labores/{id}` | Todos | Detalle de una labor agrícola con sus líneas de insumos (`labor_insumo`) |
+| `POST` | `/api/labores` | `ADMIN`, `AGRONOMO` | Programa una orden de trabajo en estado `PLANIFICADA` (CU-03) y reserva stock (`RESERVADO`, RN-07) |
+| `PATCH` | `/api/labores/{id}/reprogramar` | `ADMIN`, `AGRONOMO` | Reprograma la fecha planificada de una labor pendiente (`PLANIFICADA`, `APROBADA_CLIMA`, `BLOQUEADA_CLIMA`) conservando sus reservas (CU-08) |
+| `POST` | `/api/labores/{id}/cancelar` | `ADMIN`, `AGRONOMO` | Cancela una labor pendiente (`CANCELADA`), pasa sus reservas a `LIBERADO` y descuenta `stock_reservado` (CU-08, RF-05) |
+
+**Reglas que aplica el backend (CU-03, CU-08, RN-03, RN-07, RN-08, RN-10):**
+* El lote no puede estar `COSECHADO` ni en `DESCANSO`, salvo que la labor sea de tipo `LABRANZA` (`409 Conflict`).
+* Si se asigna maquinaria (`maquinariaId` opcional), debe encontrarse en estado `OPERATIVO` (`409 Conflict`, RN-10).
+* Por cada insumo solicitado se verifica `stockDisponible = stockActual - stockReservado >= cantidadUtilizada` (RN-03). Si algún insumo no alcanza, se rechaza toda la operación (`409 Conflict`) informando la cantidad faltante sin reservar nada.
+* Al cancelar una labor pendiente (`PLANIFICADA`, `APROBADA_CLIMA` o `BLOQUEADA_CLIMA`), cada línea `RESERVADO` pasa a `LIBERADO` y se libera `insumo.stock_reservado` (RN-07). Las labores `EN_EJECUCION`, `COMPLETADA` o `CANCELADA` no admiten reprogramación ni cancelación (`409 Conflict`, RN-08).
+
+| Situación | Respuesta |
+| :--- | :--- |
+| Campos obligatorios faltantes, cantidades inválidas o insumos duplicados en la misma labor | `400` |
+| Programación, reprogramación o cancelación por `OPERARIO` | `403` |
+| Lote, maquinaria, insumo o labor inexistente | `404` |
+| Stock disponible insuficiente, maquinaria no `OPERATIVO`, lote en `COSECHADO`/`DESCANSO` o transición de estado inválida | `409` |
+
 ## Configuración útil
 
 | Variable | Default | Uso |
