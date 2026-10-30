@@ -43,3 +43,14 @@ export function eliminarMaquinaria(id) {
     method: 'DELETE',
   })
 }
+
+export function listarMantenimientos(maquinariaId) {
+  return apiFetch(`/maquinarias/${maquinariaId}/mantenimientos`)
+}
+
+export function registrarMantenimiento(maquinariaId, payload) {
+  return apiFetch(`/maquinarias/${maquinariaId}/mantenimientos`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}

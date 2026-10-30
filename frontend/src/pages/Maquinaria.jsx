@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import MaquinariaFormModal from '../components/maquinaria/MaquinariaFormModal.jsx'
+import MantenimientoModal from '../components/maquinaria/MantenimientoModal.jsx'
 import { getSession, isAdmin } from '../services/api.js'
 import {
   cambiarEstadoMaquinaria,
@@ -38,6 +39,7 @@ function Maquinaria() {
   const [soloAlertas, setSoloAlertas] = useState(false)
 
   const [modalFormulario, setModalFormulario] = useState(null)
+  const [maquinariaService, setMaquinariaService] = useState(null)
   const [maquinariaAEliminar, setMaquinariaAEliminar] = useState(null)
   const [eliminando, setEliminando] = useState(false)
   const [errorEliminacion, setErrorEliminacion] = useState('')
@@ -383,6 +385,17 @@ function Maquinaria() {
                   </td>
                   <td>
                     <div className="acciones-celda">
+                      <button
+                        type="button"
+                        className="btn btn--secundario btn--chico"
+                        onClick={() => {
+                          setMensajeExito('')
+                          setMaquinariaService(item)
+                        }}
+                      >
+                        Service
+                      </button>
+
                       {item.estado === 'EN_LABOR' && (
                         <span className="texto-suave texto-chico">
                           En labor activa
@@ -481,6 +494,18 @@ function Maquinaria() {
           onCerrar={() => setModalFormulario(null)}
           onGuardado={async (mensaje) => {
             setModalFormulario(null)
+            setMensajeExito(mensaje)
+            await recargarMaquinarias()
+          }}
+        />
+      )}
+
+      {maquinariaService && (
+        <MantenimientoModal
+          maquinaria={maquinariaService}
+          onCerrar={() => setMaquinariaService(null)}
+          onGuardado={async (mensaje) => {
+            setMaquinariaService(null)
             setMensajeExito(mensaje)
             await recargarMaquinarias()
           }}

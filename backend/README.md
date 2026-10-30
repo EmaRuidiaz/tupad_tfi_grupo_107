@@ -154,6 +154,34 @@ Cada respuesta incluye los campos derivados `horasRestantesService` (`horasParaP
 | Maquinaria inexistente | `404` |
 | Transición de estado no permitida, edición/baja en labor o baja con historial asociado | `409` |
 
+## Mantenimientos de maquinaria (HU-06)
+
+| Método | Endpoint | Roles | Descripción |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/maquinarias/{id}/mantenimientos` | Todos | Historial de services de la máquina, del más reciente al más antiguo |
+| `POST` | `/api/maquinarias/{id}/mantenimientos` | `ADMIN`, `AGRONOMO`, `OPERARIO` | Registra un service (CU-06), asociado al usuario del token |
+
+**Reglas que aplica el backend:**
+* Al registrar el service, `proximoServiceHoras` se copia a `maquinaria.horasParaProximoService` y la máquina queda `OPERATIVO` (si estaba `EN_MANTENIMIENTO`, vuelve sola: RF-04).
+* No se puede registrar un service si la máquina está `EN_LABOR` ni `FUERA_DE_SERVICIO` (un administrador debe reingresarla primero a `EN_MANTENIMIENTO`).
+* La lectura del horómetro (`horasMaquinaEnService`) no puede ser menor a la del último service, y la fecha no puede ser futura ni anterior a la del último service. Si la lectura supera el horómetro de la máquina, se actualiza `horasUsoActuales`.
+* `proximoServiceHoras` debe ser mayor a la lectura y al horómetro actual, para que la máquina no quede con el service vencido.
+
+```bash
+# Registrar un service (cualquier rol autenticado)
+curl -X POST http://localhost:8080/api/maquinarias/1/mantenimientos \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"fechaService": "2026-10-27", "horasMaquinaEnService": 990, "tipoMantenimiento": "PREVENTIVO_PROGRAMADO", "costo": 450, "proximoServiceHoras": 1250, "descripcion": "Cambio de aceite y filtros"}'
+```
+
+`tipoMantenimiento` admite `PREVENTIVO_PROGRAMADO`, `CAMBIO_ACEITE_FILTROS` y `CORRECTIVO_ROTURA`.
+
+| Situación | Respuesta |
+| :--- | :--- |
+| Validación de campos, fecha futura, lectura o fecha anterior al último service, o próximo service inválido | `400` |
+| Maquinaria inexistente | `404` |
+| Máquina `EN_LABOR` o `FUERA_DE_SERVICIO` | `409` |
+
 ## Reglas climáticas agronómicas (HU-07)
 
 | Método | Endpoint | Roles | Descripción |
