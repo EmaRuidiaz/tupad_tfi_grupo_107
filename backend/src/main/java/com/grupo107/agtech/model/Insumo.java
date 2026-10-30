@@ -48,4 +48,17 @@ public class Insumo {
     public boolean isStockCritico() {
         return stockActual.compareTo(stockMinimoAlerta) <= 0;
     }
+
+    public void reservar(BigDecimal cantidad) {
+        if (cantidad != null && cantidad.compareTo(BigDecimal.ZERO) > 0) {
+            this.stockReservado = this.stockReservado.add(cantidad);
+        }
+    }
+
+    public void liberarReserva(BigDecimal cantidad) {
+        if (cantidad != null && cantidad.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal nuevo = this.stockReservado.subtract(cantidad);
+            this.stockReservado = nuevo.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : nuevo;
+        }
+    }
 }
