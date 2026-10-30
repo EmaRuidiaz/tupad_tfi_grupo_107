@@ -10,6 +10,5 @@ public class CambioEstadoLoteRequest {
     @NotNull(message = "El estado destino es obligatorio")
     private EstadoLote estado;
 
-    // Obligatoria cuando el cambio representa una pérdida total del cultivo.
     private String observacion;
 }

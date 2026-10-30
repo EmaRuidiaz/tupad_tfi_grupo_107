@@ -4,10 +4,6 @@ import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Valida polígonos en formato WKT ({@code POLYGON((lon lat, lon lat, ...))}) sin depender
- * de una librería GIS. Cada anillo debe tener al menos 4 puntos y estar cerrado.
- */
 final class PoligonoWktValidator {
 
     private static final Pattern POLYGON = Pattern.compile("^POLYGON\\s*\\((.*)\\)$",
@@ -16,7 +12,6 @@ final class PoligonoWktValidator {
     private PoligonoWktValidator() {
     }
 
-    /** @throws IllegalArgumentException con el detalle del error de formato. */
     static void validar(String wkt) {
         Matcher matcher = POLYGON.matcher(wkt.trim());
         if (!matcher.matches()) {

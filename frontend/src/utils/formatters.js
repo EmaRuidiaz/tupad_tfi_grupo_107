@@ -58,6 +58,18 @@ export function etiquetaTipoMantenimiento(tipo) {
   return TIPOS_MANTENIMIENTO.find((t) => t.valor === tipo)?.etiqueta || tipo
 }
 
+export const TIPOS_LABOR_REGLA = [
+  { valor: 'PULVERIZACION', etiqueta: 'Pulverización' },
+  { valor: 'SIEMBRA', etiqueta: 'Siembra' },
+  { valor: 'COSECHA', etiqueta: 'Cosecha' },
+  { valor: 'FERTILIZACION', etiqueta: 'Fertilización' },
+]
+
+export function etiquetaTipoLabor(tipo) {
+  if (tipo === 'LABRANZA') return 'Labranza'
+  return TIPOS_LABOR_REGLA.find((t) => t.valor === tipo)?.etiqueta || tipo
+}
+
 export function formatearNumero(valor) {
   return Number(valor ?? 0).toLocaleString('es-AR', {
     minimumFractionDigits: 2,
