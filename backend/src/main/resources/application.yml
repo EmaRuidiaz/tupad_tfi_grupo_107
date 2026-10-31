@@ -17,6 +17,17 @@ app:
   jwt:
     # Vigencia del token: 8 horas (HU-14). El secreto se define por perfil (dev) o variable de entorno JWT_SECRET (prod).
     expiration-ms: 28800000
+  # API meteorológica (HU-08). Resiliencia según doc 07, sección 7.3.
+  clima:
+    base-url: ${CLIMA_BASE_URL:https://api.open-meteo.com}
+    timeout: 3s
+    reintentos: 2
+    espera-reintento: 500ms
+    ventana-circuito: 10
+    umbral-fallas-pct: 50
+    circuito-abierto: 60s
+    llamadas-semiabierto: 3
+    vigencia-cache: 30m
 
 logging:
   level:

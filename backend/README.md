@@ -205,12 +205,40 @@ curl -X POST http://localhost:8080/api/maquinarias/1/mantenimientos \
 | Regla climática inexistente | `404` |
 | Baja o cambio de `tipoLabor` con labores pendientes asociadas | `409` |
 
+## Clima actual de un lote (HU-08)
+
+| Método | Endpoint | Roles | Descripción |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/lotes/{id}/clima` | Todos | Condiciones actuales en las coordenadas del lote, consultadas a [Open-Meteo](https://open-meteo.com) (sin API key) |
+
+```json
+{
+  "loteId": 1, "loteNombre": "Lote Norte - La Escondida", "latitud": -33.892, "longitud": -60.573,
+  "temperaturaC": 26.5, "vientoVelocidadKmh": 5.1, "probabilidadLluviaPct": 1, "humedadRelativaPct": 47,
+  "precipitacionMm": 0.0, "fechaLectura": "2026-10-31T16:30:00", "origen": "API", "obtenidaEn": "2026-10-31T19:36:25Z"
+}
+```
+
+Las variables y unidades coinciden con las de la evaluación de reglas climáticas (HU-07), así que la lectura se puede evaluar sin conversiones. `fechaLectura` es la hora local del lote informada por el proveedor; `obtenidaEn` es el instante (UTC) en que se consultó la API.
+
+**Resiliencia (doc 07, sección 7.3):** la lógica depende de la interfaz `ProveedorClima`; el adaptador `ClimaClient` aplica, con Resilience4j y Caffeine:
+* Timeout de 3 s por petición y hasta 2 reintentos con espera exponencial (500 ms, 1 s), sólo ante errores de red, HTTP 5xx o 429.
+* Circuit breaker: se abre si falla el 50% de las últimas 10 llamadas, queda abierto 60 s y luego prueba con 3 llamadas.
+* Si la API falla, se responde con la última lectura de las mismas coordenadas (redondeadas a 2 decimales) si tiene menos de 30 minutos, con `"origen": "CACHE"`. Si no hay, se responde `503` sin afectar al resto de los módulos (RNF-03).
+* Los cambios de estado del circuito se registran en el log, y el estado del circuito, los reintentos y los aciertos de caché se publican como métricas de Micrometer (RNF-06).
+
+| Situación | Respuesta |
+| :--- | :--- |
+| Lote inexistente | `404` |
+| API climática caída y sin lectura en caché vigente | `503` |
+
 ## Configuración útil
 
 | Variable | Default | Uso |
 | :--- | :--- | :--- |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Orígenes permitidos (separados por coma) para el frontend |
 | `JWT_SECRET` | *(sólo `prod`, obligatoria)* | Secreto para firmar los JWT (mínimo 32 caracteres). En `dev` se usa un secreto fijo de desarrollo, por lo que los tokens sobreviven a un reinicio |
+| `CLIMA_BASE_URL` | `https://api.open-meteo.com` | URL base del proveedor meteorológico. El resto de los parámetros de resiliencia está en `app.clima.*` de `application.yml` |
 
 > En `prod` la app **no arranca** sin `JWT_SECRET`. Además, las contraseñas de `data.sql` son sólo para desarrollo: cambiarlas si se carga ese archivo en un ambiente real.
 
