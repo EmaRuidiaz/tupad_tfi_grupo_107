@@ -32,6 +32,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -51,6 +53,10 @@ public class LaborService {
     );
 
     private static final long VENTANA_CONFLICTO_MINUTOS = 119;
+
+    private static final int HORAS_POR_DIA = 24;
+
+    private static final DateTimeFormatter FORMATO_FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final LaborAgricolaRepository laborRepository;
     private final LoteRepository loteRepository;
@@ -209,6 +215,15 @@ public class LaborService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "No se puede iniciar una labor en estado " + labor.getEstado());
         }
+        // RN-01 / doc 06 §6.3.2: sólo LABRANZA pasa directo de PLANIFICADA a EN_EJECUCION;
+        // el resto debe superar antes la validación climática (APROBADA_CLIMA, HU-10).
+        if (labor.getEstado() == EstadoLabor.PLANIFICADA
+                && labor.getTipoLabor().requiereValidacionClimatica()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "La labor de " + labor.getTipoLabor()
+                            + " requiere validación climática previa (estado APROBADA_CLIMA, RN-01) antes de iniciarse."
+                            + " Sólo las labores de LABRANZA pueden iniciarse directamente desde PLANIFICADA");
+        }
 
         Usuario usuario = buscarUsuario(username);
         Lote lote = buscarYValidarLote(labor.getLote().getId(), labor.getTipoLabor());
@@ -239,24 +254,25 @@ public class LaborService {
     }
 
     @Transactional
-    public LaborResponse completar(Long id, CompletarLaborRequest request, String username) {
+    public LaborResponse completar(Long id, CompletarLaborRequest request) {
         LaborAgricola labor = buscarLaborParaActualizar(id);
 
-        if (labor.getEstado() == EstadoLabor.BLOQUEADA_CLIMA) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "No se puede completar una labor en estado BLOQUEADA_CLIMA; debe reprogramarse o validarse climáticamente");
-        }
+        // doc 06 §6.3.2: COMPLETADA sólo se alcanza desde EN_EJECUCION (RN-08).
         if (!labor.getEstado().admiteCierre()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "No se puede completar una labor en estado " + labor.getEstado());
+                    "Sólo se puede completar una labor EN_EJECUCION (estado actual: " + labor.getEstado()
+                            + "). Iniciá la labor antes de registrar su cierre");
         }
 
+        LocalDateTime ahora = LocalDateTime.now();
         BigDecimal horasReales = request != null ? request.getHorasMaquinaConsumidas() : null;
+
         if (labor.getMaquinaria() != null) {
             if (horasReales == null || horasReales.compareTo(BigDecimal.ZERO) <= 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Debe informar las horas reales de máquina empleadas (mayores a 0) para completar una labor con maquinaria asignada");
             }
+            validarTopeHorasMaquina(horasReales, labor.getFechaEjecucion(), ahora);
         } else {
             if (horasReales != null && horasReales.compareTo(BigDecimal.ZERO) > 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -265,59 +281,36 @@ public class LaborService {
             horasReales = BigDecimal.ZERO;
         }
 
-        boolean yaEnEjecucion = labor.getEstado() == EstadoLabor.EN_EJECUCION;
-        Usuario usuario = buscarUsuario(username);
-        Lote lote = yaEnEjecucion
-                ? loteRepository.findByIdForUpdate(labor.getLote().getId())
+        Lote lote = loteRepository.findByIdForUpdate(labor.getLote().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Lote no encontrado con id: " + labor.getLote().getId()))
-                : buscarYValidarLote(labor.getLote().getId(), labor.getTipoLabor());
+                        "Lote no encontrado con id: " + labor.getLote().getId()));
 
-        LocalDateTime ahora = LocalDateTime.now();
-        Maquinaria maq = null;
-
+        BigDecimal costoMaquinaria = BigDecimal.ZERO;
         if (labor.getMaquinaria() != null) {
-            maq = maquinariaRepository.findByIdForUpdate(labor.getMaquinaria().getId())
+            Maquinaria maq = maquinariaRepository.findByIdForUpdate(labor.getMaquinaria().getId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                             "Maquinaria no encontrada con id: " + labor.getMaquinaria().getId()));
-            if (!yaEnEjecucion && maq.getEstado() != EstadoMaquinaria.OPERATIVO) {
+            if (maq.getEstado() != EstadoMaquinaria.EN_LABOR) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "La maquinaria '" + maq.getNombre()
-                                + "' no está disponible para ejecutar la labor (estado actual: "
-                                + maq.getEstado() + "; debe estar OPERATIVO)");
-            }
-            if (yaEnEjecucion
-                    && maq.getEstado() != EstadoMaquinaria.EN_LABOR
-                    && maq.getEstado() != EstadoMaquinaria.OPERATIVO) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "La maquinaria '" + maq.getNombre()
-                                + "' se encuentra en un estado inválido para cerrar la labor: "
-                                + maq.getEstado());
+                                + "' se encuentra en un estado inválido para cerrar la labor (estado actual: "
+                                + maq.getEstado() + "; se esperaba EN_LABOR)");
             }
             maq.sumarHoras(horasReales);
             maq.setEstado(EstadoMaquinaria.OPERATIVO);
             maquinariaRepository.save(maq);
             labor.setMaquinaria(maq);
+            costoMaquinaria = horasReales.multiply(maq.getCostoOperativoHora()).setScale(2, RoundingMode.HALF_UP);
         }
 
-        consumirReservasActivas(labor, usuario, lote, ahora);
-
+        // Los insumos se consumieron al iniciar (RN-07): su costo_subtotal ya es histórico (RN-05).
         BigDecimal totalInsumos = labor.getInsumos().stream()
                 .filter(i -> i.getEstadoReserva() == EstadoReserva.CONSUMIDO)
                 .map(LaborInsumo::getCostoSubtotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal costoMaquinaria = maq != null
-                ? horasReales.multiply(maq.getCostoOperativoHora()).setScale(2, RoundingMode.HALF_UP)
-                : BigDecimal.ZERO;
-
-        BigDecimal costoTotal = totalInsumos.add(costoMaquinaria).setScale(2, RoundingMode.HALF_UP);
-
-        if (labor.getFechaEjecucion() == null) {
-            labor.setFechaEjecucion(ahora);
-        }
         labor.setHorasMaquinaConsumidas(horasReales);
-        labor.setCostoTotalCalculado(costoTotal);
+        labor.setCostoTotalCalculado(totalInsumos.add(costoMaquinaria).setScale(2, RoundingMode.HALF_UP));
         labor.setEstado(EstadoLabor.COMPLETADA);
 
         String obsCierre = request != null ? textoOpcional(request.getObservaciones()) : null;
@@ -335,6 +328,24 @@ public class LaborService {
         labor.setLote(lote);
 
         return LaborResponse.from(laborRepository.save(labor));
+    }
+
+    /**
+     * Una máquina no puede trabajar más de 24 hs por día calendario: el tope es
+     * 24 hs por cada día transcurrido desde el inicio de la labor (incluido el día de inicio).
+     */
+    private void validarTopeHorasMaquina(BigDecimal horas, LocalDateTime fechaInicio, LocalDateTime ahora) {
+        if (fechaInicio == null) {
+            return;
+        }
+        long dias = ChronoUnit.DAYS.between(fechaInicio.toLocalDate(), ahora.toLocalDate()) + 1;
+        BigDecimal tope = BigDecimal.valueOf(HORAS_POR_DIA * Math.max(1, dias));
+        if (horas.compareTo(tope) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Las horas de máquina informadas (" + horas + " hs) superan el máximo posible desde el inicio de la labor ("
+                            + tope + " hs: 24 hs por día calendario desde el "
+                            + fechaInicio.toLocalDate().format(FORMATO_FECHA) + ")");
+        }
     }
 
     private Lote buscarYValidarLote(Long loteId, TipoLabor tipoLabor) {

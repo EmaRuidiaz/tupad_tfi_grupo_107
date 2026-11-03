@@ -23,14 +23,10 @@ function DetalleLaborModal({ labor, onCerrar }) {
     labor.probabilidadLluviaPct != null ||
     labor.humedadRegistradaPct != null
 
-  const costoMaquinariaConsolidado =
-    labor.estado === 'COMPLETADA'
-      ? Math.max(
-          0,
-          Number(labor.costoTotalCalculado || 0) -
-            Number(labor.costoInsumosEstimado || 0),
-        )
-      : 0
+  const costoInsumosMostrado =
+    labor.estado === 'COMPLETADA' || labor.estado === 'EN_EJECUCION'
+      ? labor.costoInsumosConsumido
+      : labor.costoInsumosEstimado
 
   return (
     <Modal
@@ -73,19 +69,19 @@ function DetalleLaborModal({ labor, onCerrar }) {
             <div>
               <strong>Horas de máquina empleadas:</strong>{' '}
               {formatearNumero(labor.horasMaquinaConsumidas)} hs ($
-              {formatearNumero(costoMaquinariaConsolidado)})
+              {formatearNumero(labor.costoMaquinaria)})
             </div>
             <div>
               <strong>Costo total consolidado (RN-05):</strong>{' '}
               <strong>$ {formatearNumero(labor.costoTotalCalculado)}</strong>{' '}
-              (Insumos: $ {formatearNumero(labor.costoInsumosEstimado)} +
-              Maquinaria: $ {formatearNumero(costoMaquinariaConsolidado)})
+              (Insumos: $ {formatearNumero(costoInsumosMostrado)} + Maquinaria:
+              $ {formatearNumero(labor.costoMaquinaria)})
             </div>
           </>
         ) : (
           <div>
             <strong>Costo de insumos:</strong> ${' '}
-            {formatearNumero(labor.costoInsumosEstimado)}{' '}
+            {formatearNumero(costoInsumosMostrado)}{' '}
             {labor.estado === 'EN_EJECUCION' ? '(consumido)' : '(estimado)'}
           </div>
         )}

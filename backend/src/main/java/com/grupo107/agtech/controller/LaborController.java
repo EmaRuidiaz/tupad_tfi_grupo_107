@@ -90,8 +90,7 @@ public class LaborController {
     @PreAuthorize("hasAnyRole('ADMIN', 'AGRONOMO', 'OPERARIO')")
     public LaborResponse completar(
             @PathVariable Long id,
-            @Valid @RequestBody(required = false) CompletarLaborRequest request,
-            Authentication auth) {
-        return laborService.completar(id, request, auth.getName());
+            @Valid @RequestBody(required = false) CompletarLaborRequest request) {
+        return laborService.completar(id, request);
     }
 }

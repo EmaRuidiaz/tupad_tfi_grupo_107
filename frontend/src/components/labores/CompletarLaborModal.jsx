@@ -5,8 +5,27 @@ import {
   etiquetaEstadoLabor,
   etiquetaEstadoLote,
   etiquetaTipoLabor,
+  formatearFecha,
   formatearNumero,
 } from '../../utils/formatters.js'
+
+const HORAS_POR_DIA = 24
+
+function calcularTopeHorasDesdeInicio(fechaEjecucion) {
+  if (!fechaEjecucion) return HORAS_POR_DIA
+  const inicio = new Date(fechaEjecucion)
+  if (Number.isNaN(inicio.getTime())) return HORAS_POR_DIA
+  const hoy = new Date()
+  const inicioDia = new Date(
+    inicio.getFullYear(),
+    inicio.getMonth(),
+    inicio.getDate(),
+  )
+  const hoyDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+  const diffMs = hoyDia.getTime() - inicioDia.getTime()
+  const dias = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1
+  return Math.max(1, dias) * HORAS_POR_DIA
+}
 
 function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) {
   const tieneMaquinaria = Boolean(labor?.maquinariaId)
@@ -29,6 +48,11 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
     return Number.isFinite(n) && n > 0 ? n : 0
   }, [horasMaquina])
 
+  const topeHoras = useMemo(
+    () => calcularTopeHorasDesdeInicio(labor?.fechaEjecucion),
+    [labor],
+  )
+
   const costoHoraMaquina = tieneMaquinaria
     ? Number(
         labor?.maquinariaCostoOperativoHora ??
@@ -41,7 +65,9 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
     ? Math.round(horasNum * costoHoraMaquina * 100) / 100
     : 0
 
-  const costoInsumos = Number(labor?.costoInsumosEstimado || 0)
+  const costoInsumos = Number(
+    labor?.costoInsumosConsumido ?? labor?.costoInsumosEstimado ?? 0,
+  )
 
   const costoTotalProyectado =
     Math.round((costoInsumos + costoMaquinariaCalculado) * 100) / 100
@@ -55,7 +81,22 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
     return { actuales, proximo, nuevasHoras, superaraService }
   }, [maquinariaActual, horasNum])
 
-  const yaEnEjecucion = labor?.estado === 'EN_EJECUCION'
+  const tieneCombustibleEnOrden = useMemo(() => {
+    return Boolean(
+      labor?.insumos?.some((i) => i.insumoCategoria === 'COMBUSTIBLE'),
+    )
+  }, [labor])
+
+  const estimacionCombustibleFaltante = useMemo(() => {
+    if (!tieneMaquinaria || tieneCombustibleEnOrden || horasNum <= 0) {
+      return null
+    }
+    const consumoPorHora = Number(maquinariaActual?.consumoLitrosHora || 0)
+    if (consumoPorHora <= 0) return null
+    const litrosEstimados = Math.round(horasNum * consumoPorHora * 100) / 100
+    return { consumoPorHora, litrosEstimados }
+  }, [tieneMaquinaria, tieneCombustibleEnOrden, horasNum, maquinariaActual])
+
   const cambiaraLoteASembrado =
     labor?.tipoLabor === 'SIEMBRA' && labor?.loteEstado === 'EN_PREPARACION'
 
@@ -67,6 +108,12 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
       if (horasMaquina === '' || horasNum <= 0) {
         setError(
           'Indicá las horas reales de máquina empleadas (deben ser mayores a 0).',
+        )
+        return
+      }
+      if (horasNum > topeHoras) {
+        setError(
+          `Las horas informadas (${formatearNumero(horasNum)} hs) superan el máximo posible desde el inicio de la labor (${topeHoras} hs: 24 hs por día calendario).`,
         )
         return
       }
@@ -108,6 +155,10 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
             <strong>Estado actual:</strong> {etiquetaEstadoLabor(labor.estado)}
           </div>
           <div>
+            <strong>Inicio de ejecución:</strong>{' '}
+            {formatearFecha(labor.fechaEjecucion)}
+          </div>
+          <div>
             <strong>Lote:</strong> {labor.loteNombre} (
             {formatearNumero(labor.loteSuperficieHa)} ha ·{' '}
             {etiquetaEstadoLote(labor.loteEstado)})
@@ -131,13 +182,14 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
         {tieneMaquinaria && (
           <div className="campo">
             <label htmlFor="completar-horas">
-              Horas reales de máquina empleadas *
+              Horas reales de máquina empleadas * (máx. {topeHoras} hs)
             </label>
             <input
               id="completar-horas"
               type="number"
               step="0.01"
               min="0.01"
+              max={topeHoras}
               placeholder="Ej. 8.50"
               value={horasMaquina}
               onChange={(e) => setHorasMaquina(e.target.value)}
@@ -167,17 +219,29 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
           </div>
         )}
 
+        {estimacionCombustibleFaltante && (
+          <div className="alerta alerta--advertencia" role="note">
+            <strong>Aviso de combustible:</strong> Esta orden no incluye un
+            insumo de categoría <strong>Combustible</strong>. El costo operativo
+            por hora no incluye gasoil (consumo estimado para{' '}
+            {formatearNumero(horasNum)} hs:{' '}
+            <strong>
+              {formatearNumero(estimacionCombustibleFaltante.litrosEstimados)} L
+            </strong>{' '}
+            a {formatearNumero(estimacionCombustibleFaltante.consumoPorHora)}{' '}
+            L/h).
+          </div>
+        )}
+
         <div className="resumen-ajuste">
           <div>
-            <strong>Impacto en stock de insumos:</strong>{' '}
+            <strong>Insumos consumidos al iniciar:</strong>{' '}
             {!labor.insumos || labor.insumos.length === 0
               ? 'Esta orden no tiene insumos asociados.'
-              : yaEnEjecucion
-                ? 'El stock físico ya fue descontado al iniciar la ejecución (estado Consumido).'
-                : `Se descontarán físicamente ${labor.insumos.length} insumo(s) reservados y se registrará el egreso por labor en el historial de stock.`}
+              : `${labor.insumos.length} línea(s) en estado Consumido.`}
           </div>
           <div>
-            <strong>Subtotal insumos:</strong> ${' '}
+            <strong>Subtotal insumos (histórico, RN-05):</strong> ${' '}
             {formatearNumero(costoInsumos)}
           </div>
           {tieneMaquinaria && (

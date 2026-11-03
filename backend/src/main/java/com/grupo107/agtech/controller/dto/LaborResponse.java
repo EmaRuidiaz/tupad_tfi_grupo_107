@@ -34,6 +34,8 @@ public record LaborResponse(
         BigDecimal horasMaquinaConsumidas,
         BigDecimal costoTotalCalculado,
         BigDecimal costoInsumosEstimado,
+        BigDecimal costoInsumosConsumido,
+        BigDecimal costoMaquinaria,
         BigDecimal temperaturaRegistrada,
         BigDecimal vientoVelocidadKmh,
         BigDecimal probabilidadLluviaPct,
@@ -52,6 +54,16 @@ public record LaborResponse(
                 .filter(i -> i.estadoReserva() != EstadoReserva.LIBERADO)
                 .map(LaborInsumoResponse::costoEstimado)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Subtotales históricos fijados al consumir (RN-05): no dependen del precio vigente.
+        BigDecimal costoInsumosConsumido = items.stream()
+                .filter(i -> i.estadoReserva() == EstadoReserva.CONSUMIDO)
+                .map(LaborInsumoResponse::costoSubtotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Se deriva del total inmutable para no depender del costo/hora vigente de la máquina.
+        BigDecimal costoMaquinaria = labor.getEstado() == EstadoLabor.COMPLETADA
+                && labor.getCostoTotalCalculado() != null
+                ? labor.getCostoTotalCalculado().subtract(costoInsumosConsumido).max(BigDecimal.ZERO)
+                : null;
 
         return new LaborResponse(
                 labor.getId(),
@@ -74,6 +86,8 @@ public record LaborResponse(
                 labor.getHorasMaquinaConsumidas(),
                 labor.getCostoTotalCalculado(),
                 costoInsumosEstimado,
+                costoInsumosConsumido,
+                costoMaquinaria,
                 labor.getTemperaturaRegistrada(),
                 labor.getVientoVelocidadKmh(),
                 labor.getProbabilidadLluviaPct(),

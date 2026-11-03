@@ -17,6 +17,6 @@ public enum EstadoLabor {
     }
 
     public boolean admiteCierre() {
-        return this == PLANIFICADA || this == APROBADA_CLIMA || this == EN_EJECUCION;
+        return this == EN_EJECUCION;
     }
 }

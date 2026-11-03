@@ -46,16 +46,16 @@ function admiteGestionPlanificacion(estado) {
   )
 }
 
-function admiteIniciarEjecucion(estado) {
-  return estado === 'PLANIFICADA' || estado === 'APROBADA_CLIMA'
+// RN-01 / doc 06 §6.3.2: LABRANZA inicia desde PLANIFICADA; el resto desde APROBADA_CLIMA.
+function admiteIniciarEjecucion(labor) {
+  if (!labor) return false
+  if (labor.estado === 'APROBADA_CLIMA') return true
+  return labor.estado === 'PLANIFICADA' && !labor.requiereValidacionClimatica
 }
 
+// RN-08 / doc 06 §6.3.2: sólo una labor EN_EJECUCION puede pasar a COMPLETADA.
 function admiteCompletarLabor(estado) {
-  return (
-    estado === 'PLANIFICADA' ||
-    estado === 'APROBADA_CLIMA' ||
-    estado === 'EN_EJECUCION'
-  )
+  return estado === 'EN_EJECUCION'
 }
 
 function Labores() {
@@ -231,6 +231,14 @@ function Labores() {
     }
   }
 
+  const detalleModalInicio = laborAIniciar
+    ? `Al iniciar, la orden pasará a estado En ejecución, se descontará el stock físico de los insumos reservados (registrando el egreso en el historial) y la maquinaria asignada pasará a estado En labor.${
+        laborAIniciar.maquinariaMantenimientoVencido
+          ? ` ⚠ ATENCIÓN (RN-06): La maquinaria "${laborAIniciar.maquinariaNombre}" tiene el umbral de mantenimiento vencido; se recomienda registrar el service al finalizar.`
+          : ''
+      }`
+    : ''
+
   return (
     <section className="pagina">
       <div className="pagina__encabezado">
@@ -389,7 +397,7 @@ function Labores() {
             <tbody>
               {laboresFiltradas.map((labor) => {
                 const esPendiente = admiteGestionPlanificacion(labor.estado)
-                const puedeIniciarEsta = admiteIniciarEjecucion(labor.estado)
+                const puedeIniciarEsta = admiteIniciarEjecucion(labor)
                 const puedeCompletarEsta = admiteCompletarLabor(labor.estado)
 
                 return (
@@ -476,7 +484,12 @@ function Labores() {
                       ) : (
                         <>
                           <strong>
-                            $ {formatearNumero(labor.costoInsumosEstimado)}
+                            ${' '}
+                            {formatearNumero(
+                              labor.estado === 'EN_EJECUCION'
+                                ? labor.costoInsumosConsumido
+                                : labor.costoInsumosEstimado,
+                            )}
                           </strong>
                           <div className="texto-suave texto-chico">
                             {labor.estado === 'EN_EJECUCION'
@@ -503,7 +516,7 @@ function Labores() {
                         {puedeEjecutar && puedeIniciarEsta && (
                           <button
                             type="button"
-                            className="btn btn--secundario btn--chico"
+                            className="btn btn--primario btn--chico"
                             onClick={() => {
                               setMensajeExito('')
                               setErrorInicio('')
@@ -626,7 +639,7 @@ function Labores() {
             ? `¿Confirmás el inicio en campo de la orden #${laborAIniciar.id} (${etiquetaTipoLabor(laborAIniciar.tipoLabor)} en "${laborAIniciar.loteNombre}")?`
             : ''
         }
-        detalle="Al iniciar, la orden pasará a estado En ejecución, se descontará el stock físico de los insumos reservados (registrando el egreso en el historial) y la maquinaria asignada pasará a estado En labor."
+        detalle={detalleModalInicio}
         textoConfirmar="Sí, iniciar labor"
         cargando={iniciando}
         error={errorInicio}

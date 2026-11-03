@@ -458,53 +458,116 @@ class LaborControllerTests {
     }
 
     @Test
-    void operarioPuedeCompletarLaborDirectamenteDescontandoStockSumandoHorasYCalculandoCostoTotal() throws Exception {
+    void iniciarYCompletarLaborDeLabranzaCumpleTransicionesDescuentaStockSumaHorasYMantieneInvariantes() throws Exception {
+        String tokenAgro = bearer("agronomo1");
         String tokenOperario = bearer("operario1");
 
-        // Labor 3: PULVERIZACION en Lote 2, Maquinaria 2 (1450 hs, $60/h), Insumo 2 (170 L a $8.50 = $1445.00).
-        // Con 5.50 hs de máquina ($330.00), el costo total debe ser 1445.00 + 330.00 = 1775.00.
-        mockMvc.perform(post("/api/labores/3/completar")
+        // 1. Agrónomo programa una labor de LABRANZA (no requiere regla climática) en Lote 2 con Maquinaria 1 (985 hs, $45/h)
+        //    e Insumo 4 (Gasoil: 100 L a $1.10 = $110.00).
+        String creada = mockMvc.perform(post("/api/labores")
+                        .header("Authorization", tokenAgro)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "loteId": 2,
+                                  "maquinariaId": 1,
+                                  "tipoLabor": "LABRANZA",
+                                  "fechaPlanificada": "2026-10-20T08:00:00",
+                                  "insumos": [
+                                    { "insumoId": 4, "cantidadUtilizada": 100.00 }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.estado").value("PLANIFICADA"))
+                .andExpect(jsonPath("$.requiereValidacionClimatica").value(false))
+                .andReturn().getResponse().getContentAsString();
+        Integer laborId = JsonPath.read(creada, "$.id");
+
+        // No se puede completar directamente desde PLANIFICADA sin pasar por EN_EJECUCION (RN-08)
+        mockMvc.perform(post("/api/labores/" + laborId + "/completar")
+                        .header("Authorization", tokenOperario)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"horasMaquinaConsumidas\": 5.50}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(containsString("EN_EJECUCION")));
+
+        // 2. Operario inicia la labor: pasa de PLANIFICADA a EN_EJECUCION, consume stock y pone maquinaria EN_LABOR
+        mockMvc.perform(post("/api/labores/" + laborId + "/iniciar")
+                        .header("Authorization", tokenOperario))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(laborId))
+                .andExpect(jsonPath("$.estado").value("EN_EJECUCION"))
+                .andExpect(jsonPath("$.fechaEjecucion").isNotEmpty())
+                .andExpect(jsonPath("$.costoInsumosConsumido").value(110.0))
+                .andExpect(jsonPath("$.insumos[0].estadoReserva").value("CONSUMIDO"))
+                .andExpect(jsonPath("$.insumos[0].costoSubtotal").value(110.0));
+
+        // Stock de Insumo 4 descontado físicamente (5000 -> 4900) y reserva liberada
+        mockMvc.perform(get("/api/insumos/4").header("Authorization", tokenOperario))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stockActual").value(4900.0))
+                .andExpect(jsonPath("$.stockReservado").value(0.0))
+                .andExpect(jsonPath("$.stockDisponible").value(4900.0));
+
+        // Movimiento EGRESO_LABOR registrado con el operario autenticado
+        mockMvc.perform(get("/api/insumos/4/movimientos").header("Authorization", tokenOperario))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].tipo").value("EGRESO_LABOR"))
+                .andExpect(jsonPath("$[0].cantidad").value(-100.0))
+                .andExpect(jsonPath("$[0].laborId").value(laborId))
+                .andExpect(jsonPath("$[0].usuarioUsername").value("operario1"));
+
+        // Maquinaria 1 en estado EN_LABOR
+        mockMvc.perform(get("/api/maquinarias/1").header("Authorization", tokenOperario))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("EN_LABOR"));
+
+        // 3. Operario completa la labor con 5.50 hs de máquina ($247.50) -> total = 110.00 + 247.50 = 357.50
+        mockMvc.perform(post("/api/labores/" + laborId + "/completar")
                         .header("Authorization", tokenOperario)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "horasMaquinaConsumidas": 5.50,
-                                  "observaciones": "Aplicación completada en condiciones óptimas"
+                                  "observaciones": "Labranza vertical completada sin novedades"
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(3))
+                .andExpect(jsonPath("$.id").value(laborId))
                 .andExpect(jsonPath("$.estado").value("COMPLETADA"))
-                .andExpect(jsonPath("$.fechaEjecucion").isNotEmpty())
                 .andExpect(jsonPath("$.horasMaquinaConsumidas").value(5.5))
-                .andExpect(jsonPath("$.costoTotalCalculado").value(1775.0))
-                .andExpect(jsonPath("$.insumos[0].estadoReserva").value("CONSUMIDO"))
-                .andExpect(jsonPath("$.insumos[0].costoSubtotal").value(1445.0));
+                .andExpect(jsonPath("$.costoInsumosConsumido").value(110.0))
+                .andExpect(jsonPath("$.costoMaquinaria").value(247.5))
+                .andExpect(jsonPath("$.costoTotalCalculado").value(357.5));
 
-        // 1) Stock de insumo 2 descontado físicamente y reserva liberada
-        mockMvc.perform(get("/api/insumos/2").header("Authorization", tokenOperario))
+        // Maquinaria 1 suma 5.50 hs (985 -> 990.50) y vuelve a OPERATIVO
+        mockMvc.perform(get("/api/maquinarias/1").header("Authorization", tokenOperario))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.stockActual").value(1030.0))
-                .andExpect(jsonPath("$.stockReservado").value(0.0))
-                .andExpect(jsonPath("$.stockDisponible").value(1030.0));
-
-        // 2) Movimiento de stock EGRESO_LABOR registrado con el operario responsable
-        mockMvc.perform(get("/api/insumos/2/movimientos").header("Authorization", tokenOperario))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].tipo").value("EGRESO_LABOR"))
-                .andExpect(jsonPath("$[0].cantidad").value(-170.0))
-                .andExpect(jsonPath("$[0].laborId").value(3))
-                .andExpect(jsonPath("$[0].usuarioUsername").value("operario1"));
-
-        // 3) Horómetro de maquinaria 2 incrementado en 5.50 hs (1450 -> 1455.50) y en estado OPERATIVO
-        mockMvc.perform(get("/api/maquinarias/2").header("Authorization", tokenOperario))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.horasUsoActuales").value(1455.5))
+                .andExpect(jsonPath("$.horasUsoActuales").value(990.5))
                 .andExpect(jsonPath("$.estado").value("OPERATIVO"));
+
+        // 4. Verificación de invariantes globales de stock tras iniciar y completar la labor (doc 03 §3.15)
+        Integer inconsistentesStockActual = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM insumo i
+                WHERE i.stock_actual <> COALESCE(
+                    (SELECT SUM(m.cantidad) FROM movimiento_stock m WHERE m.insumo_id = i.id), 0)
+                """, Integer.class);
+        assertEquals(0, inconsistentesStockActual,
+                "Todo insumo debe mantener stock_actual = SUM(movimiento_stock.cantidad)");
+
+        Integer inconsistentesReservado = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM insumo i
+                WHERE i.stock_reservado <> COALESCE(
+                    (SELECT SUM(li.cantidad_utilizada) FROM labor_insumo li
+                     WHERE li.insumo_id = i.id AND li.estado_reserva = 'RESERVADO'), 0)
+                """, Integer.class);
+        assertEquals(0, inconsistentesReservado,
+                "Todo insumo debe mantener stock_reservado = SUM(labor_insumo.cantidad_utilizada) en RESERVADO");
     }
 
     @Test
-    void flujoEnDosPasosIniciarYCompletarPasaMaquinariaAEnLaborConsumeStockActualizaLoteSembradoYPreservaCostoHistorico() throws Exception {
+    void laborConReglaClimaticaExigeAprobadaClimaParaIniciarActualizaLoteSembradoYPreservaCostoHistorico() throws Exception {
         String tokenAgro = bearer("agronomo1");
         String tokenOperario = bearer("operario1");
         String tokenAdmin = bearer("admin");
@@ -529,19 +592,33 @@ class LaborControllerTests {
                 .andReturn().getResponse().getContentAsString();
         Integer laborId = JsonPath.read(creada, "$.id");
 
-        // 2. Operario inicia la ejecución de la labor
+        // RN-01: SIEMBRA tiene regla climática asociada, por lo que no puede iniciarse desde PLANIFICADA sin APROBADA_CLIMA
+        mockMvc.perform(post("/api/labores/" + laborId + "/iniciar")
+                        .header("Authorization", tokenOperario))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(containsString("APROBADA_CLIMA")));
+
+        // Simulamos aprobación climática previa (HU-10)
+        jdbcTemplate.update("UPDATE labor_agricola SET estado = 'APROBADA_CLIMA' WHERE id = ?", laborId);
+        entityManager.clear();
+
+        // Tampoco se puede completar directamente desde APROBADA_CLIMA sin iniciar antes (RN-08)
+        mockMvc.perform(post("/api/labores/" + laborId + "/completar")
+                        .header("Authorization", tokenOperario)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"horasMaquinaConsumidas\": 20.00}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(containsString("EN_EJECUCION")));
+
+        // 2. Operario inicia la ejecución de la labor desde APROBADA_CLIMA
         mockMvc.perform(post("/api/labores/" + laborId + "/iniciar")
                         .header("Authorization", tokenOperario))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estado").value("EN_EJECUCION"))
                 .andExpect(jsonPath("$.fechaEjecucion").isNotEmpty())
+                .andExpect(jsonPath("$.costoInsumosConsumido").value(5500.0))
                 .andExpect(jsonPath("$.insumos[0].estadoReserva").value("CONSUMIDO"))
                 .andExpect(jsonPath("$.insumos[0].costoSubtotal").value(5500.0));
-
-        // Maquinaria 1 pasa a EN_LABOR
-        mockMvc.perform(get("/api/maquinarias/1").header("Authorization", tokenOperario))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.estado").value("EN_LABOR"));
 
         // Una labor EN_EJECUCION no puede cancelarse
         mockMvc.perform(post("/api/labores/" + laborId + "/cancelar")
@@ -577,6 +654,8 @@ class LaborControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estado").value("COMPLETADA"))
                 .andExpect(jsonPath("$.horasMaquinaConsumidas").value(20.0))
+                .andExpect(jsonPath("$.costoInsumosConsumido").value(5500.0))
+                .andExpect(jsonPath("$.costoMaquinaria").value(900.0))
                 .andExpect(jsonPath("$.costoTotalCalculado").value(6400.0))
                 .andExpect(jsonPath("$.loteEstado").value("SEMBRADO"));
 
@@ -594,19 +673,84 @@ class LaborControllerTests {
     }
 
     @Test
-    void validacionesDeCierreRechazanHorasInvalidasYEstadosNoEjecutables() throws Exception {
+    void rechazaInicioSiStockFisicoEsInsuficienteAlMomentoDeEjecutar() throws Exception {
+        String tokenOperario = bearer("operario1");
+
+        // Simulamos que la labor 3 fue aprobada climáticamente pero el stock físico cayó por debajo de lo requerido (CU-04 flujo 6a)
+        jdbcTemplate.update("UPDATE labor_agricola SET estado = 'APROBADA_CLIMA' WHERE id = 3");
+        jdbcTemplate.update("UPDATE insumo SET stock_reservado = 0, stock_actual = 100.00 WHERE id = 2");
+        entityManager.clear();
+
+        mockMvc.perform(post("/api/labores/3/iniciar")
+                        .header("Authorization", tokenOperario))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(allOf(
+                        containsString("Stock físico insuficiente"),
+                        containsString("faltan 70.00 LITROS")
+                )));
+    }
+
+    @Test
+    void validacionesDeCierreRechazanFaltaDeTokenHorasInvalidasTopeDiarioYEstadosNoEjecutables() throws Exception {
         String tokenOperario = bearer("operario1");
         String tokenAgro = bearer("agronomo1");
 
-        // 1. Labor 3 tiene maquinaria asignada: completar sin horas o con 0 hs devuelve 400
+        // 1. Peticiones sin token devuelven 401 Unauthorized (RF-01)
+        mockMvc.perform(post("/api/labores/3/iniciar"))
+                .andExpect(status().isUnauthorized());
+
         mockMvc.perform(post("/api/labores/3/completar")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"horasMaquinaConsumidas\": 5.00}"))
+                .andExpect(status().isUnauthorized());
+
+        // 2. Programamos e iniciamos una labor con maquinaria para validar horas de cierre (0 hs y > 24 hs/día)
+        String conMaq = mockMvc.perform(post("/api/labores")
+                        .header("Authorization", tokenAgro)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "loteId": 2,
+                                  "maquinariaId": 1,
+                                  "tipoLabor": "LABRANZA",
+                                  "fechaPlanificada": "2026-10-27T08:00:00",
+                                  "insumos": []
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Integer idConMaq = JsonPath.read(conMaq, "$.id");
+
+        mockMvc.perform(post("/api/labores/" + idConMaq + "/iniciar")
+                        .header("Authorization", tokenOperario))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("EN_EJECUCION"));
+
+        // Rechaza 0 hs en labor con maquinaria
+        mockMvc.perform(post("/api/labores/" + idConMaq + "/completar")
                         .header("Authorization", tokenOperario)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"horasMaquinaConsumidas\": 0}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("horas reales de máquina")));
 
-        // 2. Labor manual (sin maquinaria): rechaza horas > 0 pero permite completar con 0 hs
+        // Rechaza horas que superan el máximo físico posible desde fechaEjecucion (24 hs por día calendario)
+        mockMvc.perform(post("/api/labores/" + idConMaq + "/completar")
+                        .header("Authorization", tokenOperario)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"horasMaquinaConsumidas\": 30.00}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("24 hs por día calendario")));
+
+        // Completa válidamente con 6 hs
+        mockMvc.perform(post("/api/labores/" + idConMaq + "/completar")
+                        .header("Authorization", tokenOperario)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"horasMaquinaConsumidas\": 6.00}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("COMPLETADA"));
+
+        // 3. Labor manual (sin maquinaria): tras iniciarse, rechaza horas > 0 pero permite completar con 0 hs
         String manual = mockMvc.perform(post("/api/labores")
                         .header("Authorization", tokenAgro)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -621,6 +765,11 @@ class LaborControllerTests {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         Integer idManual = JsonPath.read(manual, "$.id");
+
+        mockMvc.perform(post("/api/labores/" + idManual + "/iniciar")
+                        .header("Authorization", tokenOperario))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("EN_EJECUCION"));
 
         mockMvc.perform(post("/api/labores/" + idManual + "/completar")
                         .header("Authorization", tokenOperario)
@@ -638,7 +787,7 @@ class LaborControllerTests {
                 .andExpect(jsonPath("$.horasMaquinaConsumidas").value(0.0))
                 .andExpect(jsonPath("$.costoTotalCalculado").value(0.0));
 
-        // 3. No se puede volver a completar ni iniciar una labor ya COMPLETADA
+        // 4. No se puede volver a completar ni iniciar una labor ya COMPLETADA
         mockMvc.perform(post("/api/labores/1/completar")
                         .header("Authorization", tokenOperario)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -649,7 +798,7 @@ class LaborControllerTests {
                         .header("Authorization", tokenOperario))
                 .andExpect(status().isConflict());
 
-        // 4. No se puede iniciar ni completar una labor en estado BLOQUEADA_CLIMA
+        // 5. No se puede iniciar ni completar una labor en estado BLOQUEADA_CLIMA
         jdbcTemplate.update("UPDATE labor_agricola SET estado = 'BLOQUEADA_CLIMA' WHERE id = 3");
         entityManager.clear();
 
@@ -663,6 +812,6 @@ class LaborControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"horasMaquinaConsumidas\": 5.00}"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value(containsString("BLOQUEADA_CLIMA")));
+                .andExpect(jsonPath("$.message").value(containsString("EN_EJECUCION")));
     }
 }
