@@ -205,7 +205,7 @@ curl -X POST http://localhost:8080/api/maquinarias/1/mantenimientos \
 | Regla climática inexistente | `404` |
 | Baja o cambio de `tipoLabor` con labores pendientes asociadas | `409` |
 
-## Labores agrícolas — Planificación (HU-09)
+## Labores agrícolas — Planificación, Ejecución y Cierre (HU-09 / HU-11)
 
 | Método | Endpoint | Roles | Descripción |
 | :--- | :--- | :--- | :--- |
@@ -215,19 +215,23 @@ curl -X POST http://localhost:8080/api/maquinarias/1/mantenimientos \
 | `PUT` | `/api/labores/{id}` | `ADMIN`, `AGRONOMO` | Modifica una orden pendiente (`PLANIFICADA`, `APROBADA_CLIMA`, `BLOQUEADA_CLIMA`), reemplazando atómicamente sus reservas de insumos |
 | `PATCH` | `/api/labores/{id}/reprogramar` | `ADMIN`, `AGRONOMO` | Reprograma la fecha planificada de una labor pendiente (`PLANIFICADA`, `APROBADA_CLIMA`, `BLOQUEADA_CLIMA`) conservando sus reservas (CU-08) |
 | `POST` | `/api/labores/{id}/cancelar` | `ADMIN`, `AGRONOMO` | Cancela una labor pendiente (`CANCELADA`), pasa sus reservas a `LIBERADO` y descuenta `stock_reservado` (CU-08, RF-05) |
+| `POST` | `/api/labores/{id}/iniciar` | `ADMIN`, `AGRONOMO`, `OPERARIO` | Inicia la ejecución en campo (`EN_EJECUCION`), consume el stock reservado (`CONSUMIDO` + `EGRESO_LABOR`) y pasa la maquinaria a `EN_LABOR` (CU-04, HU-11) |
+| `POST` | `/api/labores/{id}/completar` | `ADMIN`, `AGRONOMO`, `OPERARIO` | Completa la labor (`COMPLETADA`) registrando `horasMaquinaConsumidas`, suma horas al horómetro, calcula `costoTotalCalculado` (RN-05) y si es `SIEMBRA` pasa el lote a `SEMBRADO` (HU-11) |
 
-**Reglas que aplica el backend (CU-03, CU-08, RN-03, RN-07, RN-08, RN-10):**
+**Reglas que aplica el backend (CU-03, CU-04, CU-08, RN-03, RN-05, RN-07, RN-08, RN-10):**
 * Coherencia agronómica con el estado del lote: en lotes `COSECHADO` o `DESCANSO` sólo se admite `LABRANZA`; `SIEMBRA` exige `EN_PREPARACION`; `LABRANZA` se bloquea si el lote tiene cultivo activo (`SEMBRADO`, `EN_CRECIMIENTO`, `LISTO_COSECHA`); `COSECHA` exige `LISTO_COSECHA` o `EN_CRECIMIENTO` (`409 Conflict`).
 * Si se asigna maquinaria (`maquinariaId` opcional), debe encontrarse en estado `OPERATIVO` (RN-10) y no tener otra orden pendiente dentro de una ventana de ±2 horas (`409 Conflict`).
 * Por cada insumo solicitado se verifica `stockDisponible = stockActual - stockReservado >= cantidadUtilizada` (RN-03). Si algún insumo no alcanza, se rechaza toda la operación (`409 Conflict`) informando la cantidad faltante sin reservar nada.
+* Al iniciar o completar la labor, cada línea `RESERVADO` pasa a `CONSUMIDO`, se descuenta `stock_actual` y `stock_reservado`, se fija `costo_subtotal = cantidadUtilizada * precioUnitario` vigente (RN-05) y se registra un `movimiento_stock` de tipo `EGRESO_LABOR` asociado al usuario autenticado (RN-04).
+* Al completar la labor (`COMPLETADA`), si tiene maquinaria asignada se exige `horasMaquinaConsumidas > 0`, se suman las horas a `maquinaria.horasUsoActuales`, la máquina vuelve a `OPERATIVO` y se persiste de forma inmutable `costoTotalCalculado = SUM(costoSubtotal) + horasMaquinaConsumidas * costoOperativoHora` (RN-05). Si la labor es `SIEMBRA` y el lote está `EN_PREPARACION`, el lote pasa automáticamente a `SEMBRADO`.
 * Al cancelar una labor pendiente (`PLANIFICADA`, `APROBADA_CLIMA` o `BLOQUEADA_CLIMA`), cada línea `RESERVADO` pasa a `LIBERADO` y se libera `insumo.stock_reservado` (RN-07). Las labores `EN_EJECUCION`, `COMPLETADA` o `CANCELADA` no admiten edición, reprogramación ni cancelación (`409 Conflict`, RN-08).
 
 | Situación | Respuesta |
 | :--- | :--- |
-| Campos obligatorios faltantes, cantidades inválidas o insumos duplicados en la misma labor | `400` |
+| Campos obligatorios faltantes, cantidades u horas de máquina inválidas o insumos duplicados | `400` |
 | Programación, reprogramación o cancelación por `OPERARIO` | `403` |
 | Lote, maquinaria, insumo o labor inexistente | `404` |
-| Stock disponible insuficiente, maquinaria no `OPERATIVO`, lote en `COSECHADO`/`DESCANSO` o transición de estado inválida | `409` |
+| Stock disponible/físico insuficiente, maquinaria no `OPERATIVO`, labor `BLOQUEADA_CLIMA` o transición de estado inválida | `409` |
 
 ## Clima actual de un lote (HU-08)
 
