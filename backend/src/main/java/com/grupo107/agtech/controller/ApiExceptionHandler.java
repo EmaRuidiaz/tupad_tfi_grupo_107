@@ -1,5 +1,6 @@
 package com.grupo107.agtech.controller;
 
+import com.grupo107.agtech.service.clima.ClimaNoDisponibleException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -51,6 +52,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiError> integridadDatos(DataIntegrityViolationException ex) {
         return build(HttpStatus.CONFLICT, "Operación rechazada por restricción de integridad de datos");
+    }
+
+    /** Caída de la API climática sin caché vigente (doc 07, sección 7.3): no afecta al resto de los módulos. */
+    @ExceptionHandler(ClimaNoDisponibleException.class)
+    public ResponseEntity<ApiError> climaNoDisponible(ClimaNoDisponibleException ex) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     private ResponseEntity<ApiError> build(HttpStatus status, String message) {

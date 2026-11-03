@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import CambioEstadoLoteModal from '../components/lotes/CambioEstadoLoteModal.jsx'
+import ClimaLoteModal from '../components/lotes/ClimaLoteModal.jsx'
 import LoteFormModal from '../components/lotes/LoteFormModal.jsx'
 import { getSession, tieneAlgunRol } from '../services/api.js'
 import { eliminarLote, listarLotes } from '../services/lotesService.js'
@@ -24,6 +25,7 @@ function Lotes() {
 
   const [modalFormulario, setModalFormulario] = useState(null)
   const [loteCambioEstado, setLoteCambioEstado] = useState(null)
+  const [loteClima, setLoteClima] = useState(null)
   const [loteAEliminar, setLoteAEliminar] = useState(null)
   const [eliminando, setEliminando] = useState(false)
   const [errorEliminacion, setErrorEliminacion] = useState('')
@@ -109,8 +111,8 @@ function Lotes() {
         <div>
           <h1>Gestión de Lotes</h1>
           <p className="pagina__subtitulo">
-            Catastro digital de la superficie sembrable: ubicación, superficie
-            y estado agronómico de cada lote.
+            Catastro digital de la superficie sembrable: ubicación, superficie y
+            estado agronómico de cada lote.
           </p>
         </div>
 
@@ -212,7 +214,7 @@ function Lotes() {
                 <th>Coordenadas</th>
                 <th>Estado</th>
                 <th>Responsable</th>
-                {puedeEditar && <th>Acciones</th>}
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -239,43 +241,55 @@ function Lotes() {
                     </span>
                   </td>
                   <td>{lote.usuarioUsername || '-'}</td>
-                  {puedeEditar && (
-                    <td>
-                      <div className="acciones-celda">
-                        <button
-                          type="button"
-                          className="btn btn--secundario btn--chico"
-                          onClick={() => {
-                            setMensajeExito('')
-                            setLoteCambioEstado(lote)
-                          }}
-                        >
-                          Estado
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn--secundario btn--chico"
-                          onClick={() => {
-                            setMensajeExito('')
-                            setModalFormulario({ lote })
-                          }}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn--peligro btn--chico"
-                          onClick={() => {
-                            setMensajeExito('')
-                            setErrorEliminacion('')
-                            setLoteAEliminar(lote)
-                          }}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </td>
-                  )}
+                  <td>
+                    <div className="acciones-celda">
+                      <button
+                        type="button"
+                        className="btn btn--secundario btn--chico"
+                        onClick={() => {
+                          setMensajeExito('')
+                          setLoteClima(lote)
+                        }}
+                      >
+                        Clima
+                      </button>
+                      {puedeEditar && (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn--secundario btn--chico"
+                            onClick={() => {
+                              setMensajeExito('')
+                              setLoteCambioEstado(lote)
+                            }}
+                          >
+                            Estado
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--secundario btn--chico"
+                            onClick={() => {
+                              setMensajeExito('')
+                              setModalFormulario({ lote })
+                            }}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--peligro btn--chico"
+                            onClick={() => {
+                              setMensajeExito('')
+                              setErrorEliminacion('')
+                              setLoteAEliminar(lote)
+                            }}
+                          >
+                            Eliminar
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -305,6 +319,10 @@ function Lotes() {
             await recargarLotes()
           }}
         />
+      )}
+
+      {loteClima && (
+        <ClimaLoteModal lote={loteClima} onCerrar={() => setLoteClima(null)} />
       )}
 
       <ConfirmModal

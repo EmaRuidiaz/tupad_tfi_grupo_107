@@ -34,3 +34,8 @@ export function cambiarEstadoLote(id, payload) {
     body: JSON.stringify(payload),
   })
 }
+
+// HU-08: clima actual en las coordenadas del lote (Open-Meteo con caché de contingencia).
+export function obtenerClimaLote(id) {
+  return apiFetch(`/lotes/${id}/clima`)
+}
