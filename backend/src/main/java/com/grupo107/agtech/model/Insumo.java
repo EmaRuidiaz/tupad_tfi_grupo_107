@@ -61,4 +61,11 @@ public class Insumo {
             this.stockReservado = nuevo.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : nuevo;
         }
     }
+
+    public void consumirReserva(BigDecimal cantidad) {
+        if (cantidad != null && cantidad.compareTo(BigDecimal.ZERO) > 0) {
+            liberarReserva(cantidad);
+            this.stockActual = this.stockActual.subtract(cantidad);
+        }
+    }
 }
