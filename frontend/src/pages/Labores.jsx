@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ConfirmModal from '../components/ConfirmModal.jsx'
+import CompletarLaborModal from '../components/labores/CompletarLaborModal.jsx'
 import DetalleLaborModal from '../components/labores/DetalleLaborModal.jsx'
 import LaborFormModal from '../components/labores/LaborFormModal.jsx'
 import ReprogramarLaborModal from '../components/labores/ReprogramarLaborModal.jsx'
 import { getSession, tieneAlgunRol } from '../services/api.js'
 import { listarInsumos } from '../services/insumosService.js'
-import { cancelarLabor, listarLabores } from '../services/laboresService.js'
+import {
+  cancelarLabor,
+  iniciarLabor,
+  listarLabores,
+} from '../services/laboresService.js'
 import { listarLotes } from '../services/lotesService.js'
 import { listarMaquinarias } from '../services/maquinariaService.js'
 import {
@@ -41,9 +46,22 @@ function admiteGestionPlanificacion(estado) {
   )
 }
 
+function admiteIniciarEjecucion(estado) {
+  return estado === 'PLANIFICADA' || estado === 'APROBADA_CLIMA'
+}
+
+function admiteCompletarLabor(estado) {
+  return (
+    estado === 'PLANIFICADA' ||
+    estado === 'APROBADA_CLIMA' ||
+    estado === 'EN_EJECUCION'
+  )
+}
+
 function Labores() {
   const sesion = getSession()
   const puedePlanificar = tieneAlgunRol('ADMIN', 'AGRONOMO')
+  const puedeEjecutar = tieneAlgunRol('ADMIN', 'AGRONOMO', 'OPERARIO')
 
   const [labores, setLabores] = useState([])
   const [lotes, setLotes] = useState([])
@@ -61,6 +79,10 @@ function Labores() {
   const [modalFormulario, setModalFormulario] = useState(null)
   const [laborDetalle, setLaborDetalle] = useState(null)
   const [laborReprogramar, setLaborReprogramar] = useState(null)
+  const [laborACompletar, setLaborACompletar] = useState(null)
+  const [laborAIniciar, setLaborAIniciar] = useState(null)
+  const [iniciando, setIniciando] = useState(false)
+  const [errorInicio, setErrorInicio] = useState('')
   const [laborACancelar, setLaborACancelar] = useState(null)
   const [cancelando, setCancelando] = useState(false)
   const [errorCancelacion, setErrorCancelacion] = useState('')
@@ -123,14 +145,27 @@ function Labores() {
     const pendientes = labores.filter((l) =>
       admiteGestionPlanificacion(l.estado),
     ).length
+    const enEjecucion = labores.filter(
+      (l) => l.estado === 'EN_EJECUCION',
+    ).length
     const completadas = labores.filter((l) => l.estado === 'COMPLETADA').length
+    const costoAcumulado = labores
+      .filter((l) => l.estado === 'COMPLETADA')
+      .reduce((acc, l) => acc + Number(l.costoTotalCalculado || 0), 0)
     const reservasActivas = labores.reduce(
       (acc, l) =>
         acc +
         (l.insumos?.filter((i) => i.estadoReserva === 'RESERVADO').length || 0),
       0,
     )
-    return { total, pendientes, completadas, reservasActivas }
+    return {
+      total,
+      pendientes,
+      enEjecucion,
+      completadas,
+      costoAcumulado,
+      reservasActivas,
+    }
   }, [labores])
 
   const laboresFiltradas = useMemo(() => {
@@ -159,6 +194,24 @@ function Labores() {
     })
   }, [labores, loteFiltro, tipoFiltro, estadoFiltro, busqueda])
 
+  async function confirmarInicio() {
+    if (!laborAIniciar) return
+    setIniciando(true)
+    setErrorInicio('')
+    try {
+      const iniciada = await iniciarLabor(laborAIniciar.id)
+      setLaborAIniciar(null)
+      setMensajeExito(
+        `Orden #${iniciada.id} en ejecución. Se descontó el stock reservado y la maquinaria pasó a estado En labor.`,
+      )
+      await recargarTodo()
+    } catch (err) {
+      setErrorInicio(err.message || 'No se pudo iniciar la labor.')
+    } finally {
+      setIniciando(false)
+    }
+  }
+
   async function confirmarCancelacion() {
     if (!laborACancelar) return
     setCancelando(true)
@@ -184,8 +237,9 @@ function Labores() {
         <div>
           <h1>Labores Agrícolas</h1>
           <p className="pagina__subtitulo">
-            Planificación de órdenes de trabajo, asignación de lote y maquinaria
-            y reserva automática de insumos en stock (HU-09).
+            Planificación de órdenes de trabajo, reserva de insumos, ejecución
+            en campo y cierre con impacto en stock, horómetros y costos (HU-09 /
+            HU-11).
           </p>
         </div>
 
@@ -203,7 +257,7 @@ function Labores() {
             </button>
           ) : (
             <span className="etiqueta etiqueta--info">
-              Modo consulta ({sesion?.rol})
+              Modo operativo ({sesion?.rol})
             </span>
           )}
         </div>
@@ -213,7 +267,11 @@ function Labores() {
         <div className="tarjeta-kpi">
           <span className="tarjeta-kpi__titulo">Órdenes registradas</span>
           <strong className="tarjeta-kpi__valor">{resumen.total}</strong>
-          <span className="tarjeta-kpi__detalle">Historial total</span>
+          <span className="tarjeta-kpi__detalle">
+            {resumen.enEjecucion > 0
+              ? `${resumen.enEjecucion} en ejecución ahora`
+              : 'Historial total'}
+          </span>
         </div>
 
         <div className="tarjeta-kpi">
@@ -227,7 +285,9 @@ function Labores() {
         <div className="tarjeta-kpi">
           <span className="tarjeta-kpi__titulo">Labores completadas</span>
           <strong className="tarjeta-kpi__valor">{resumen.completadas}</strong>
-          <span className="tarjeta-kpi__detalle">Con costo consolidado</span>
+          <span className="tarjeta-kpi__detalle">
+            Costo acum.: $ {formatearNumero(resumen.costoAcumulado)}
+          </span>
         </div>
 
         <div className="tarjeta-kpi">
@@ -329,6 +389,9 @@ function Labores() {
             <tbody>
               {laboresFiltradas.map((labor) => {
                 const esPendiente = admiteGestionPlanificacion(labor.estado)
+                const puedeIniciarEsta = admiteIniciarEjecucion(labor.estado)
+                const puedeCompletarEsta = admiteCompletarLabor(labor.estado)
+
                 return (
                   <tr
                     key={labor.id}
@@ -370,6 +433,9 @@ function Labores() {
                           <div>{labor.maquinariaNombre}</div>
                           <div className="texto-suave texto-chico">
                             {labor.maquinariaMatriculaOSerie}
+                            {labor.estado === 'COMPLETADA'
+                              ? ` · ${formatearNumero(labor.horasMaquinaConsumidas)} hs`
+                              : ''}
                             {labor.maquinariaMantenimientoVencido
                               ? ' · ⚠ Service vencido'
                               : ''}
@@ -413,7 +479,9 @@ function Labores() {
                             $ {formatearNumero(labor.costoInsumosEstimado)}
                           </strong>
                           <div className="texto-suave texto-chico">
-                            Insumos est.
+                            {labor.estado === 'EN_EJECUCION'
+                              ? 'Insumos cons.'
+                              : 'Insumos est.'}
                           </div>
                         </>
                       )}
@@ -432,6 +500,31 @@ function Labores() {
                         >
                           Detalle
                         </button>
+                        {puedeEjecutar && puedeIniciarEsta && (
+                          <button
+                            type="button"
+                            className="btn btn--secundario btn--chico"
+                            onClick={() => {
+                              setMensajeExito('')
+                              setErrorInicio('')
+                              setLaborAIniciar(labor)
+                            }}
+                          >
+                            Iniciar
+                          </button>
+                        )}
+                        {puedeEjecutar && puedeCompletarEsta && (
+                          <button
+                            type="button"
+                            className="btn btn--primario btn--chico"
+                            onClick={() => {
+                              setMensajeExito('')
+                              setLaborACompletar(labor)
+                            }}
+                          >
+                            Completar
+                          </button>
+                        )}
                         {puedePlanificar && esPendiente && (
                           <>
                             <button
@@ -511,6 +604,40 @@ function Labores() {
           }}
         />
       )}
+
+      {laborACompletar && (
+        <CompletarLaborModal
+          labor={laborACompletar}
+          maquinarias={maquinarias}
+          onCerrar={() => setLaborACompletar(null)}
+          onGuardado={async (mensaje) => {
+            setLaborACompletar(null)
+            setMensajeExito(mensaje)
+            await recargarTodo()
+          }}
+        />
+      )}
+
+      <ConfirmModal
+        abierto={Boolean(laborAIniciar)}
+        titulo="Iniciar ejecución de labor (CU-04 / HU-11)"
+        mensaje={
+          laborAIniciar
+            ? `¿Confirmás el inicio en campo de la orden #${laborAIniciar.id} (${etiquetaTipoLabor(laborAIniciar.tipoLabor)} en "${laborAIniciar.loteNombre}")?`
+            : ''
+        }
+        detalle="Al iniciar, la orden pasará a estado En ejecución, se descontará el stock físico de los insumos reservados (registrando el egreso en el historial) y la maquinaria asignada pasará a estado En labor."
+        textoConfirmar="Sí, iniciar labor"
+        cargando={iniciando}
+        error={errorInicio}
+        onCancelar={() => {
+          if (!iniciando) {
+            setLaborAIniciar(null)
+            setErrorInicio('')
+          }
+        }}
+        onConfirmar={confirmarInicio}
+      />
 
       <ConfirmModal
         abierto={Boolean(laborACancelar)}

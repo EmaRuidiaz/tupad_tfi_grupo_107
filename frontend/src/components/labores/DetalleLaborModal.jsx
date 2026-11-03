@@ -23,6 +23,15 @@ function DetalleLaborModal({ labor, onCerrar }) {
     labor.probabilidadLluviaPct != null ||
     labor.humedadRegistradaPct != null
 
+  const costoMaquinariaConsolidado =
+    labor.estado === 'COMPLETADA'
+      ? Math.max(
+          0,
+          Number(labor.costoTotalCalculado || 0) -
+            Number(labor.costoInsumosEstimado || 0),
+        )
+      : 0
+
   return (
     <Modal
       abierto
@@ -60,15 +69,24 @@ function DetalleLaborModal({ labor, onCerrar }) {
             : 'Sin maquinaria (labor manual)'}
         </div>
         {labor.estado === 'COMPLETADA' ? (
-          <div>
-            <strong>Costo total consolidado (RN-05):</strong> ${' '}
-            {formatearNumero(labor.costoTotalCalculado)} (
-            {formatearNumero(labor.horasMaquinaConsumidas)} hs máquina)
-          </div>
+          <>
+            <div>
+              <strong>Horas de máquina empleadas:</strong>{' '}
+              {formatearNumero(labor.horasMaquinaConsumidas)} hs ($
+              {formatearNumero(costoMaquinariaConsolidado)})
+            </div>
+            <div>
+              <strong>Costo total consolidado (RN-05):</strong>{' '}
+              <strong>$ {formatearNumero(labor.costoTotalCalculado)}</strong>{' '}
+              (Insumos: $ {formatearNumero(labor.costoInsumosEstimado)} +
+              Maquinaria: $ {formatearNumero(costoMaquinariaConsolidado)})
+            </div>
+          </>
         ) : (
           <div>
-            <strong>Costo estimado de insumos:</strong> ${' '}
-            {formatearNumero(labor.costoInsumosEstimado)}
+            <strong>Costo de insumos:</strong> ${' '}
+            {formatearNumero(labor.costoInsumosEstimado)}{' '}
+            {labor.estado === 'EN_EJECUCION' ? '(consumido)' : '(estimado)'}
           </div>
         )}
       </div>
@@ -112,7 +130,8 @@ function DetalleLaborModal({ labor, onCerrar }) {
                 <th className="texto-derecha">Cantidad</th>
                 <th>Estado reserva</th>
                 <th className="texto-derecha">
-                  {labor.estado === 'COMPLETADA'
+                  {labor.estado === 'COMPLETADA' ||
+                  labor.estado === 'EN_EJECUCION'
                     ? 'Subtotal consolidado'
                     : 'Subtotal estimado'}
                 </th>
