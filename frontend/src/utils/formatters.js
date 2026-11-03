@@ -65,9 +65,36 @@ export const TIPOS_LABOR_REGLA = [
   { valor: 'FERTILIZACION', etiqueta: 'Fertilización' },
 ]
 
+export const TIPOS_LABOR = [
+  ...TIPOS_LABOR_REGLA,
+  { valor: 'LABRANZA', etiqueta: 'Labranza' },
+]
+
 export function etiquetaTipoLabor(tipo) {
-  if (tipo === 'LABRANZA') return 'Labranza'
-  return TIPOS_LABOR_REGLA.find((t) => t.valor === tipo)?.etiqueta || tipo
+  return TIPOS_LABOR.find((t) => t.valor === tipo)?.etiqueta || tipo
+}
+
+export const ESTADOS_LABOR = [
+  { valor: 'PLANIFICADA', etiqueta: 'Planificada' },
+  { valor: 'APROBADA_CLIMA', etiqueta: 'Aprobada por clima' },
+  { valor: 'BLOQUEADA_CLIMA', etiqueta: 'Bloqueada por clima' },
+  { valor: 'EN_EJECUCION', etiqueta: 'En ejecución' },
+  { valor: 'COMPLETADA', etiqueta: 'Completada' },
+  { valor: 'CANCELADA', etiqueta: 'Cancelada' },
+]
+
+export function etiquetaEstadoLabor(estado) {
+  return ESTADOS_LABOR.find((e) => e.valor === estado)?.etiqueta || estado
+}
+
+export const ESTADOS_RESERVA = [
+  { valor: 'RESERVADO', etiqueta: 'Reservado' },
+  { valor: 'CONSUMIDO', etiqueta: 'Consumido' },
+  { valor: 'LIBERADO', etiqueta: 'Liberado' },
+]
+
+export function etiquetaEstadoReserva(estado) {
+  return ESTADOS_RESERVA.find((e) => e.valor === estado)?.etiqueta || estado
 }
 
 export function formatearNumero(valor) {
@@ -98,4 +125,12 @@ export function fechaHoyIso() {
   const mes = String(hoy.getMonth() + 1).padStart(2, '0')
   const dia = String(hoy.getDate()).padStart(2, '0')
   return `${hoy.getFullYear()}-${mes}-${dia}`
+}
+
+export function fechaHoraManianaIso() {
+  const maniana = new Date()
+  maniana.setDate(maniana.getDate() + 1)
+  const mes = String(maniana.getMonth() + 1).padStart(2, '0')
+  const dia = String(maniana.getDate()).padStart(2, '0')
+  return `${maniana.getFullYear()}-${mes}-${dia}T08:00`
 }
