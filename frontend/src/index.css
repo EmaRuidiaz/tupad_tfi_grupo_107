@@ -649,3 +649,135 @@ a {
     padding: 1.25rem 1rem;
   }
 }
+
+
+/* Gráfico comparativo del Tablero Financiero (HU-13) */
+.grafico-financiero {
+  background-color: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: 8px;
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.grafico-financiero__encabezado {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.grafico-financiero__titulo {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+
+.grafico-financiero__leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  font-size: 0.82rem;
+  color: var(--color-texto-suave);
+}
+
+.leyenda-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.leyenda-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.leyenda-color--insumos {
+  background-color: #ef6c00;
+}
+
+.leyenda-color--maquinaria {
+  background-color: #fb8c00;
+}
+
+.leyenda-color--ingreso {
+  background-color: var(--color-primario);
+}
+
+.grafico-financiero__filas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.grafico-lote {
+  border: 1px solid var(--color-borde);
+  border-radius: 6px;
+  padding: 0.75rem 0.9rem;
+  background-color: var(--color-fondo);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.grafico-lote__cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.grafico-lote__barras {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.grafico-barra-fila {
+  display: grid;
+  grid-template-columns: 72px 1fr 115px;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.82rem;
+}
+
+.grafico-barra-etiqueta {
+  color: var(--color-texto-suave);
+  font-weight: 600;
+}
+
+.grafico-barra-pista {
+  height: 14px;
+  background-color: #e4eae4;
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+}
+
+.grafico-barra-segmento {
+  height: 100%;
+  transition: width 0.25s ease;
+}
+
+.grafico-barra-segmento--insumos {
+  background-color: #ef6c00;
+}
+
+.grafico-barra-segmento--maquinaria {
+  background-color: #fb8c00;
+}
+
+.grafico-barra-segmento--ingreso {
+  background-color: var(--color-primario);
+}
+
+.grafico-barra-valor {
+  text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+}

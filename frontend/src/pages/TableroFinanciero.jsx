@@ -1,12 +1,570 @@
-import EnConstruccion from '../components/EnConstruccion.jsx'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import DetalleFinancieroLoteModal from '../components/tablero/DetalleFinancieroLoteModal.jsx'
+import { getSession, tieneAlgunRol } from '../services/api.js'
+import { obtenerTableroFinanciero } from '../services/tableroFinancieroService.js'
+import {
+  ESTADOS_LOTE,
+  etiquetaEstadoLote,
+  formatearFechaSimple,
+  formatearNumero,
+} from '../utils/formatters.js'
+
+const FILTROS_ESTADO_ROI = [
+  { valor: 'TODOS', etiqueta: 'Todos los estados de ROI' },
+  { valor: 'CALCULADO', etiqueta: 'Con ROI calculado' },
+  { valor: 'PENDIENTE', etiqueta: 'Pendiente de cosecha' },
+  { valor: 'SIN_COSTOS', etiqueta: 'Sin costos registrados' },
+]
+
+function claseEtiquetaEstadoRoi(reporte) {
+  if (reporte.estadoRoi === 'CALCULADO') {
+    return Number(reporte.roiPct) >= 0
+      ? 'etiqueta etiqueta--ok'
+      : 'etiqueta etiqueta--critica'
+  }
+  if (reporte.estadoRoi === 'PENDIENTE') {
+    return 'etiqueta etiqueta--advertencia'
+  }
+  return 'etiqueta etiqueta--info'
+}
 
 function TableroFinanciero() {
+  const sesion = getSession()
+  const tienePermiso = tieneAlgunRol('ADMIN', 'AGRONOMO')
+
+  const [tablero, setTablero] = useState(null)
+  const [cargando, setCargando] = useState(tienePermiso)
+  const [errorGlobal, setErrorGlobal] = useState('')
+
+  const [busqueda, setBusqueda] = useState('')
+  const [estadoLoteFiltro, setEstadoLoteFiltro] = useState('TODOS')
+  const [estadoRoiFiltro, setEstadoRoiFiltro] = useState('TODOS')
+  const [soloConCosecha, setSoloConCosecha] = useState(false)
+
+  const [loteDetalle, setLoteDetalle] = useState(null)
+
+  const recargarTablero = useCallback(async () => {
+    if (!tienePermiso) return
+    setErrorGlobal('')
+    setCargando(true)
+    try {
+      const datos = await obtenerTableroFinanciero()
+      setTablero(datos)
+    } catch (err) {
+      setErrorGlobal(
+        err.message || 'No se pudo cargar el tablero financiero.',
+      )
+    } finally {
+      setCargando(false)
+    }
+  }, [tienePermiso])
+
+  useEffect(() => {
+    if (!tienePermiso) {
+      return
+    }
+    let cancelado = false
+    obtenerTableroFinanciero()
+      .then((datos) => {
+        if (!cancelado) setTablero(datos)
+      })
+      .catch((err) => {
+        if (!cancelado) {
+          setErrorGlobal(
+            err.message || 'No se pudo cargar el tablero financiero.',
+          )
+        }
+      })
+      .finally(() => {
+        if (!cancelado) setCargando(false)
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [tienePermiso])
+
+  const lotes = useMemo(() => tablero?.lotes ?? [], [tablero])
+
+  const lotesFiltrados = useMemo(() => {
+    const texto = busqueda.trim().toLowerCase()
+    return lotes.filter((item) => {
+      if (soloConCosecha && !item.cosechaRegistrada) {
+        return false
+      }
+      if (estadoLoteFiltro !== 'TODOS' && item.estadoLote !== estadoLoteFiltro) {
+        return false
+      }
+      if (estadoRoiFiltro !== 'TODOS' && item.estadoRoi !== estadoRoiFiltro) {
+        return false
+      }
+      if (texto) {
+        const coincideNombre = item.loteNombre?.toLowerCase().includes(texto)
+        const coincideSuelo = item.tipoSuelo?.toLowerCase().includes(texto)
+        const coincideCultivo = item.cultivoNombre
+          ?.toLowerCase()
+          .includes(texto)
+        if (!coincideNombre && !coincideSuelo && !coincideCultivo) {
+          return false
+        }
+      }
+      return true
+    })
+  }, [lotes, soloConCosecha, estadoLoteFiltro, estadoRoiFiltro, busqueda])
+
+  const maximoMontoEscala = useMemo(() => {
+    const valores = lotesFiltrados.flatMap((l) => [
+      Number(l.costosTotalesAcumulados || 0),
+      Number(l.ingresoBrutoTotal || 0),
+    ])
+    const max = valores.length > 0 ? Math.max(...valores) : 0
+    return max > 0 ? max : 1
+  }, [lotesFiltrados])
+
+  if (!tienePermiso) {
+    return (
+      <section className="pagina">
+        <div className="pagina__encabezado">
+          <div>
+            <h1>Tablero Financiero y ROI</h1>
+            <p className="pagina__subtitulo">
+              Reporte consolidado por lote de ingresos brutos, costos históricos
+              acumulados, margen neto y retorno de inversión (HU-13 / RF-08).
+            </p>
+          </div>
+        </div>
+        <div className="alerta alerta--advertencia" role="alert">
+          Acceso restringido: según la matriz de permisos por rol (RF-01), el
+          Tablero Financiero y las métricas de ROI están habilitados únicamente
+          para los perfiles <strong>ADMIN</strong> y <strong>AGRONOMO</strong>{' '}
+          (tu rol actual es <strong>{sesion?.rol || 'OPERARIO'}</strong>).
+        </div>
+      </section>
+    )
+  }
+
   return (
-    <EnConstruccion
-      titulo="Tablero Financiero"
-      historia="HU-13"
-      descripcion="Costos, ingresos y margen neto por lote."
-    />
+    <section className="pagina">
+      <div className="pagina__encabezado">
+        <div>
+          <h1>Tablero Financiero y ROI</h1>
+          <p className="pagina__subtitulo">
+            Consolidación económica por lote: comparación de Ingresos Brutos de
+            cosecha vs. Costos Totales Acumulados de labores completadas,
+            Margen Neto y Retorno de Inversión (HU-13 / RF-08).
+          </p>
+        </div>
+
+        <div className="pagina__acciones">
+          <button
+            type="button"
+            className="btn btn--secundario"
+            onClick={recargarTablero}
+            disabled={cargando}
+          >
+            Actualizar métricas
+          </button>
+        </div>
+      </div>
+
+      {tablero && (
+        <div className="tarjetas-resumen">
+          <div className="tarjeta-kpi">
+            <span className="tarjeta-kpi__titulo">
+              Costos totales acumulados
+            </span>
+            <strong className="tarjeta-kpi__valor">
+              $ {formatearNumero(tablero.costosTotalesAcumulados)}
+            </strong>
+            <span className="tarjeta-kpi__detalle">
+              {tablero.totalLaboresCompletadas} labor
+              {tablero.totalLaboresCompletadas === 1 ? '' : 'es'} completada
+              {tablero.totalLaboresCompletadas === 1 ? '' : 's'} · Prom.: ${' '}
+              {formatearNumero(tablero.costoPromedioPorHa)}/ha
+            </span>
+          </div>
+
+          <div className="tarjeta-kpi">
+            <span className="tarjeta-kpi__titulo">
+              Composición de costos
+            </span>
+            <strong className="tarjeta-kpi__valor">
+              $ {formatearNumero(tablero.costoInsumosTotal)}
+            </strong>
+            <span className="tarjeta-kpi__detalle">
+              En insumos consumidos · Maquinaria: ${' '}
+              {formatearNumero(tablero.costoMaquinariaTotal)}
+            </span>
+          </div>
+
+          <div className="tarjeta-kpi">
+            <span className="tarjeta-kpi__titulo">
+              Ingresos brutos de cosecha
+            </span>
+            <strong className="tarjeta-kpi__valor">
+              $ {formatearNumero(tablero.ingresosBrutosTotales)}
+            </strong>
+            <span className="tarjeta-kpi__detalle">
+              {tablero.lotesConCosecha} de {tablero.totalLotes} lotes cosechados
+              {tablero.lotesConCosecha > 0
+                ? ` · ${formatearNumero(tablero.toneladasTotalesCosechadas)} t`
+                : ' · Sin cosechas aún'}
+            </span>
+          </div>
+
+          <div className="tarjeta-kpi">
+            <span className="tarjeta-kpi__titulo">
+              Margen neto y ROI (lotes cosechados)
+            </span>
+            <strong
+              className={`tarjeta-kpi__valor ${
+                tablero.lotesConCosecha > 0
+                  ? Number(tablero.margenNetoLotesCosechados) >= 0
+                    ? 'texto-exito'
+                    : 'texto-peligro'
+                  : ''
+              }`}
+            >
+              {tablero.lotesConCosecha > 0
+                ? `$ ${formatearNumero(tablero.margenNetoLotesCosechados)}`
+                : 'Pendiente'}
+            </strong>
+            <span className="tarjeta-kpi__detalle">
+              {tablero.roiLotesCosechadosPct != null
+                ? `ROI: ${formatearNumero(tablero.roiLotesCosechadosPct)} % · Balance global: $ ${formatearNumero(tablero.margenNetoTotal)}`
+                : tablero.lotesConCosecha > 0
+                  ? 'Sin costos registrados en lotes cosechados'
+                  : `${tablero.lotesSinCosecha} lote${tablero.lotesSinCosecha === 1 ? '' : 's'} en campaña activa`}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {errorGlobal && (
+        <div className="alerta alerta--error" role="alert">
+          {errorGlobal}
+        </div>
+      )}
+
+      <div className="barra-filtros">
+        <input
+          type="search"
+          className="input-filtro"
+          placeholder="Buscar por nombre de lote, suelo o cultivo..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+        />
+
+        <select
+          className="select-filtro"
+          value={estadoLoteFiltro}
+          onChange={(e) => setEstadoLoteFiltro(e.target.value)}
+          aria-label="Filtrar por estado agronómico del lote"
+        >
+          <option value="TODOS">Todos los estados de lote</option>
+          {ESTADOS_LOTE.map((e) => (
+            <option key={e.valor} value={e.valor}>
+              {e.etiqueta}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="select-filtro"
+          value={estadoRoiFiltro}
+          onChange={(e) => setEstadoRoiFiltro(e.target.value)}
+          aria-label="Filtrar por estado de ROI"
+        >
+          {FILTROS_ESTADO_ROI.map((f) => (
+            <option key={f.valor} value={f.valor}>
+              {f.etiqueta}
+            </option>
+          ))}
+        </select>
+
+        <label className="check-filtro">
+          <input
+            type="checkbox"
+            checked={soloConCosecha}
+            onChange={(e) => setSoloConCosecha(e.target.checked)}
+          />
+          <span>Solo con cosecha ({tablero?.lotesConCosecha ?? 0})</span>
+        </label>
+      </div>
+
+      {cargando ? (
+        <p className="aviso">Calculando métricas financieras por lote...</p>
+      ) : lotesFiltrados.length === 0 ? (
+        <p className="aviso">
+          No se encontraron lotes para los criterios seleccionados.
+        </p>
+      ) : (
+        <>
+          <div className="grafico-financiero">
+            <div className="grafico-financiero__encabezado">
+              <div>
+                <h2 className="grafico-financiero__titulo">
+                  Comparativa visual por lote: Ingresos Brutos vs. Costos
+                  Acumulados
+                </h2>
+                <p className="texto-suave texto-chico" style={{ margin: 0 }}>
+                  Escala relativa al mayor monto registrado ($
+                  {' '}
+                  {formatearNumero(maximoMontoEscala)}). Hacé clic en «Desglose»
+                  para inspeccionar órdenes de trabajo o simular escenarios.
+                </p>
+              </div>
+              <div className="grafico-financiero__leyenda">
+                <span className="leyenda-item">
+                  <span className="leyenda-color leyenda-color--insumos" />
+                  Costo insumos
+                </span>
+                <span className="leyenda-item">
+                  <span className="leyenda-color leyenda-color--maquinaria" />
+                  Costo maquinaria
+                </span>
+                <span className="leyenda-item">
+                  <span className="leyenda-color leyenda-color--ingreso" />
+                  Ingreso bruto cosecha
+                </span>
+              </div>
+            </div>
+
+            <div className="grafico-financiero__filas">
+              {lotesFiltrados.map((item) => {
+                const costoInsumos = Number(item.costoInsumosAcumulado || 0)
+                const costoMaq = Number(item.costoMaquinariaAcumulado || 0)
+                const costoTotal = Number(item.costosTotalesAcumulados || 0)
+                const ingresoTotal = Number(item.ingresoBrutoTotal || 0)
+
+                const pctInsumos = Math.min(
+                  100,
+                  (costoInsumos / maximoMontoEscala) * 100,
+                )
+                const pctMaq = Math.min(
+                  100 - pctInsumos,
+                  (costoMaq / maximoMontoEscala) * 100,
+                )
+                const pctIngreso = Math.min(
+                  100,
+                  (ingresoTotal / maximoMontoEscala) * 100,
+                )
+
+                return (
+                  <div key={item.loteId} className="grafico-lote">
+                    <div className="grafico-lote__cabecera">
+                      <div>
+                        <strong>{item.loteNombre}</strong>{' '}
+                        <span className="texto-suave texto-chico">
+                          ({formatearNumero(item.superficieHa)} ha ·{' '}
+                          {etiquetaEstadoLote(item.estadoLote)})
+                        </span>
+                      </div>
+                      <span className={claseEtiquetaEstadoRoi(item)}>
+                        {item.estadoRoi === 'CALCULADO'
+                          ? `ROI: ${formatearNumero(item.roiPct)} %`
+                          : item.mensajeRoi}
+                      </span>
+                    </div>
+
+                    <div className="grafico-lote__barras">
+                      <div className="grafico-barra-fila">
+                        <span className="grafico-barra-etiqueta">Costos</span>
+                        <div className="grafico-barra-pista">
+                          {costoTotal > 0 ? (
+                            <>
+                              <div
+                                className="grafico-barra-segmento grafico-barra-segmento--insumos"
+                                style={{ width: `${pctInsumos}%` }}
+                                title={`Insumos: $ ${formatearNumero(costoInsumos)}`}
+                              />
+                              <div
+                                className="grafico-barra-segmento grafico-barra-segmento--maquinaria"
+                                style={{ width: `${pctMaq}%` }}
+                                title={`Maquinaria: $ ${formatearNumero(costoMaq)}`}
+                              />
+                            </>
+                          ) : null}
+                        </div>
+                        <span className="grafico-barra-valor">
+                          $ {formatearNumero(costoTotal)}
+                        </span>
+                      </div>
+
+                      <div className="grafico-barra-fila">
+                        <span className="grafico-barra-etiqueta">Ingresos</span>
+                        <div className="grafico-barra-pista">
+                          {item.cosechaRegistrada && ingresoTotal > 0 ? (
+                            <div
+                              className="grafico-barra-segmento grafico-barra-segmento--ingreso"
+                              style={{ width: `${pctIngreso}%` }}
+                              title={`Ingreso bruto: $ ${formatearNumero(ingresoTotal)}`}
+                            />
+                          ) : null}
+                        </div>
+                        <span className="grafico-barra-valor">
+                          {item.cosechaRegistrada ? (
+                            `$ ${formatearNumero(ingresoTotal)}`
+                          ) : (
+                            <span className="texto-suave">Pendiente</span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="tabla-contenedor">
+            <table className="tabla">
+              <thead>
+                <tr>
+                  <th>Lote</th>
+                  <th>Estado / Cultivo</th>
+                  <th className="texto-derecha">Labores</th>
+                  <th className="texto-derecha">Costos acumulados</th>
+                  <th className="texto-derecha">Costo / ha</th>
+                  <th className="texto-derecha">Ingreso bruto</th>
+                  <th className="texto-derecha">Margen neto</th>
+                  <th>ROI (%)</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lotesFiltrados.map((item) => (
+                  <tr
+                    key={item.loteId}
+                    className={
+                      item.estadoRoi === 'CALCULADO' && Number(item.roiPct) < 0
+                        ? 'fila--critica'
+                        : ''
+                    }
+                  >
+                    <td>
+                      <strong>{item.loteNombre}</strong>
+                      <div className="texto-suave texto-chico">
+                        {formatearNumero(item.superficieHa)} ha · Suelo:{' '}
+                        {item.tipoSuelo || '-'}
+                      </div>
+                    </td>
+                    <td>
+                      <span
+                        className={`etiqueta ${
+                          item.estadoLote === 'COSECHADO' ||
+                          item.estadoLote === 'LISTO_COSECHA'
+                            ? 'etiqueta--ok'
+                            : ''
+                        }`}
+                      >
+                        {etiquetaEstadoLote(item.estadoLote)}
+                      </span>
+                      {item.cosechaRegistrada ? (
+                        <div className="texto-suave texto-chico">
+                          {item.cultivoNombre} ·{' '}
+                          {formatearFechaSimple(item.fechaUltimaCosecha)}
+                        </div>
+                      ) : (
+                        <div className="texto-suave texto-chico">
+                          Sin cosecha registrada
+                        </div>
+                      )}
+                    </td>
+                    <td className="texto-derecha">
+                      <strong>{item.cantidadLaboresCompletadas}</strong>{' '}
+                      <span className="texto-suave texto-chico">compl.</span>
+                      <div className="texto-suave texto-chico">
+                        {formatearNumero(item.horasMaquinaTotales)} hs máq.
+                        {item.cantidadLaboresPendientes > 0
+                          ? ` · ${item.cantidadLaboresPendientes} pend.`
+                          : ''}
+                      </div>
+                    </td>
+                    <td className="texto-derecha">
+                      <strong>
+                        $ {formatearNumero(item.costosTotalesAcumulados)}
+                      </strong>
+                      <div className="texto-suave texto-chico">
+                        Ins.: $ {formatearNumero(item.costoInsumosAcumulado)} ·
+                        Máq.: $ {formatearNumero(item.costoMaquinariaAcumulado)}
+                      </div>
+                    </td>
+                    <td className="texto-derecha">
+                      <strong>$ {formatearNumero(item.costoPorHa)}</strong>
+                      <div className="texto-suave texto-chico">por ha</div>
+                    </td>
+                    <td className="texto-derecha">
+                      {item.cosechaRegistrada ? (
+                        <>
+                          <strong>
+                            $ {formatearNumero(item.ingresoBrutoTotal)}
+                          </strong>
+                          <div className="texto-suave texto-chico">
+                            {formatearNumero(item.toneladasTotales)} t (
+                            {formatearNumero(item.rindeTonPorHa)} t/ha)
+                          </div>
+                        </>
+                      ) : (
+                        <span className="texto-suave">
+                          Pendiente de cosecha
+                        </span>
+                      )}
+                    </td>
+                    <td className="texto-derecha">
+                      {item.cosechaRegistrada ? (
+                        <>
+                          <strong
+                            className={
+                              Number(item.margenNeto) >= 0
+                                ? 'texto-exito'
+                                : 'texto-peligro'
+                            }
+                          >
+                            $ {formatearNumero(item.margenNeto)}
+                          </strong>
+                          <div className="texto-suave texto-chico">
+                            $ {formatearNumero(item.margenPorHa)} / ha
+                          </div>
+                        </>
+                      ) : (
+                        <span className="texto-suave">
+                          Pendiente de cosecha
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span className={claseEtiquetaEstadoRoi(item)}>
+                        {item.estadoRoi === 'CALCULADO'
+                          ? `${formatearNumero(item.roiPct)} %`
+                          : item.mensajeRoi}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="acciones-celda">
+                        <button
+                          type="button"
+                          className="btn btn--secundario btn--chico"
+                          onClick={() => setLoteDetalle(item)}
+                        >
+                          Desglose
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {loteDetalle && (
+        <DetalleFinancieroLoteModal
+          reporte={loteDetalle}
+          onCerrar={() => setLoteDetalle(null)}
+        />
+      )}
+    </section>
   )
 }
 
