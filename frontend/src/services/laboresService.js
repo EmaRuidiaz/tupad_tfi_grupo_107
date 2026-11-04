@@ -39,3 +39,16 @@ export function cancelarLabor(id) {
     method: 'POST',
   })
 }
+
+export function iniciarLabor(id) {
+  return apiFetch(`/labores/${id}/iniciar`, {
+    method: 'POST',
+  })
+}
+
+export function completarLabor(id, payload = {}) {
+  return apiFetch(`/labores/${id}/completar`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}

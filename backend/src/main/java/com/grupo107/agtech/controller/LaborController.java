@@ -1,5 +1,6 @@
 package com.grupo107.agtech.controller;
 
+import com.grupo107.agtech.controller.dto.CompletarLaborRequest;
 import com.grupo107.agtech.controller.dto.LaborRequest;
 import com.grupo107.agtech.controller.dto.LaborResponse;
 import com.grupo107.agtech.controller.dto.ReprogramarLaborRequest;
@@ -75,5 +76,21 @@ public class LaborController {
     @PreAuthorize("hasAnyRole('ADMIN', 'AGRONOMO')")
     public LaborResponse cancelar(@PathVariable Long id) {
         return laborService.cancelar(id);
+    }
+
+    @PostMapping("/{id}/iniciar")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGRONOMO', 'OPERARIO')")
+    public LaborResponse iniciar(
+            @PathVariable Long id,
+            Authentication auth) {
+        return laborService.iniciar(id, auth.getName());
+    }
+
+    @PostMapping("/{id}/completar")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGRONOMO', 'OPERARIO')")
+    public LaborResponse completar(
+            @PathVariable Long id,
+            @Valid @RequestBody(required = false) CompletarLaborRequest request) {
+        return laborService.completar(id, request);
     }
 }
