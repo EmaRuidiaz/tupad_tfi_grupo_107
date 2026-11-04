@@ -22,6 +22,9 @@ public interface LaborAgricolaRepository extends JpaRepository<LaborAgricola, Lo
     List<LaborAgricola> findAllByOrderByFechaPlanificadaDescIdDesc();
 
     @EntityGraph(attributePaths = {"lote", "maquinaria", "usuario", "insumos", "insumos.insumo"})
+    List<LaborAgricola> findByLoteIdOrderByFechaPlanificadaDescIdDesc(Long loteId);
+
+    @EntityGraph(attributePaths = {"lote", "maquinaria", "usuario", "insumos", "insumos.insumo"})
     Optional<LaborAgricola> findConDetalleById(Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
