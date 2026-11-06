@@ -21,12 +21,101 @@ function claseBadgeRoi(reporte) {
   return 'etiqueta etiqueta--info'
 }
 
+function escaparCsv(valor) {
+  if (valor === null || valor === undefined) return ''
+  const texto = String(valor).replace(/"/g, '""')
+  return /[",;\n]/.test(texto) ? `"${texto}"` : texto
+}
+
+function exportarDesgloseLoteCsv(reporte) {
+  if (!reporte) return
+  const encabezados = [
+    'Orden ID',
+    'Tipo de Labor',
+    'Fecha Ejecucion',
+    'Responsable',
+    'Maquinaria',
+    'Horas Maquina',
+    'Costo Insumos ($)',
+    'Costo Maquinaria ($)',
+    'Costo Total Consolidado ($)',
+  ]
+
+  const filas = (reporte.laboresCompletadas || []).map((lab) => [
+    lab.laborId,
+    etiquetaTipoLabor(lab.tipoLabor),
+    lab.fechaEjecucion || lab.fechaPlanificada || '',
+    lab.usuarioUsername || '',
+    lab.maquinariaNombre || 'Manual',
+    lab.horasMaquinaConsumidas ?? 0,
+    lab.costoInsumos ?? 0,
+    lab.costoMaquinaria ?? 0,
+    lab.costoTotalCalculado ?? 0,
+  ])
+
+  const contenido = [
+    encabezados.map(escaparCsv).join(','),
+    ...filas.map((f) => f.map(escaparCsv).join(',')),
+  ].join('\r\n')
+
+  const blob = new Blob([`\uFEFF${contenido}`], {
+    type: 'text/csv;charset=utf-8;',
+  })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `desglose_financiero_lote_${reporte.loteId}.csv`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
 function DetalleFinancieroLoteModal({ reporte, onCerrar }) {
   const superficie = Number(reporte?.superficieHa || 0)
   const costosAcumulados = Number(reporte?.costosTotalesAcumulados || 0)
 
-  const [rindeSimuladoHa, setRindeSimuladoHa] = useState('3.50')
-  const [precioSimuladoTon, setPrecioSimuladoTon] = useState('300.00')
+  const rindeInicial =
+    reporte?.cosechaRegistrada && reporte?.rindeTonPorHa != null
+      ? String(reporte.rindeTonPorHa)
+      : '3.50'
+  const precioInicial =
+    reporte?.cosechaRegistrada && reporte?.precioVentaPromedioPorTon != null
+      ? String(reporte.precioVentaPromedioPorTon)
+      : '300.00'
+
+  const [rindeSimuladoHa, setRindeSimuladoHa] = useState(rindeInicial)
+  const [precioSimuladoTon, setPrecioSimuladoTon] = useState(precioInicial)
+
+  const resumenPorTipoLabor = useMemo(() => {
+    const lista = reporte?.laboresCompletadas || []
+    if (lista.length === 0) return []
+    const mapa = new Map()
+    for (const lab of lista) {
+      const clave = lab.tipoLabor || 'OTRA'
+      const actual = mapa.get(clave) || {
+        tipoLabor: clave,
+        cantidad: 0,
+        horasMaquina: 0,
+        costoInsumos: 0,
+        costoMaquinaria: 0,
+        costoTotal: 0,
+      }
+      actual.cantidad += 1
+      actual.horasMaquina += Number(lab.horasMaquinaConsumidas || 0)
+      actual.costoInsumos += Number(lab.costoInsumos || 0)
+      actual.costoMaquinaria += Number(lab.costoMaquinaria || 0)
+      actual.costoTotal += Number(lab.costoTotalCalculado || 0)
+      mapa.set(clave, actual)
+    }
+    return Array.from(mapa.values())
+      .map((item) => ({
+        ...item,
+        porcentaje:
+          costosAcumulados > 0 ? (item.costoTotal / costosAcumulados) * 100 : 0,
+      }))
+      .sort((a, b) => b.costoTotal - a.costoTotal)
+  }, [reporte, costosAcumulados])
 
   const simulacion = useMemo(() => {
     const rindeHa = Number(rindeSimuladoHa)
@@ -169,8 +258,56 @@ function DetalleFinancieroLoteModal({ reporte, onCerrar }) {
         </div>
       </div>
 
+      {resumenPorTipoLabor.length > 0 && (
+        <>
+          <h3 style={{ margin: '0.75rem 0 0.5rem', fontSize: '1rem' }}>
+            Incidencia de costos por etapa agronómica (Tipo de Labor)
+          </h3>
+          <div className="tabla-contenedor" style={{ marginBottom: '1rem' }}>
+            <table className="tabla">
+              <thead>
+                <tr>
+                  <th>Etapa / Tipo de labor</th>
+                  <th className="texto-derecha">Órdenes</th>
+                  <th className="texto-derecha">Horas máq.</th>
+                  <th className="texto-derecha">Insumos</th>
+                  <th className="texto-derecha">Maquinaria</th>
+                  <th className="texto-derecha">Subtotal</th>
+                  <th className="texto-derecha">% del lote</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resumenPorTipoLabor.map((fila) => (
+                  <tr key={fila.tipoLabor}>
+                    <td>
+                      <strong>{etiquetaTipoLabor(fila.tipoLabor)}</strong>
+                    </td>
+                    <td className="texto-derecha">{fila.cantidad}</td>
+                    <td className="texto-derecha">
+                      {formatearNumero(fila.horasMaquina)} hs
+                    </td>
+                    <td className="texto-derecha">
+                      $ {formatearNumero(fila.costoInsumos)}
+                    </td>
+                    <td className="texto-derecha">
+                      $ {formatearNumero(fila.costoMaquinaria)}
+                    </td>
+                    <td className="texto-derecha">
+                      <strong>$ {formatearNumero(fila.costoTotal)}</strong>
+                    </td>
+                    <td className="texto-derecha">
+                      {formatearNumero(fila.porcentaje)} %
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
       <h3 style={{ margin: '0.75rem 0 0.5rem', fontSize: '1rem' }}>
-        Composición de costos por labores completadas (
+        Detalle de órdenes de trabajo completadas (
         {reporte.laboresCompletadas?.length || 0})
       </h3>
 
@@ -306,106 +443,113 @@ function DetalleFinancieroLoteModal({ reporte, onCerrar }) {
         </div>
       )}
 
-      {!reporte.cosechaRegistrada && (
-        <div
-          style={{
-            border: '1px solid var(--color-borde)',
-            borderRadius: '8px',
-            padding: '1rem',
-            backgroundColor: 'var(--color-fondo)',
-          }}
+      <div
+        style={{
+          border: '1px solid var(--color-borde)',
+          borderRadius: '8px',
+          padding: '1rem',
+          backgroundColor: 'var(--color-fondo)',
+        }}
+      >
+        <h3 style={{ margin: '0 0 0.35rem', fontSize: '0.95rem' }}>
+          Simulador de punto de equilibrio (Break-Even) y sensibilidad de ROI
+        </h3>
+        <p
+          className="texto-suave texto-chico"
+          style={{ margin: '0 0 0.75rem' }}
         >
-          <h3 style={{ margin: '0 0 0.35rem', fontSize: '0.95rem' }}>
-            Simulador de punto de equilibrio y ROI proyectado
-          </h3>
-          <p
-            className="texto-suave texto-chico"
-            style={{ margin: '0 0 0.75rem' }}
-          >
-            Proyección informativa (no modifica datos) tomando los costos
-            acumulados actuales de{' '}
-            <strong>
-              $ {formatearNumero(reporte.costosTotalesAcumulados)}
-            </strong>{' '}
-            sobre <strong>{formatearNumero(reporte.superficieHa)} ha</strong>.
-          </p>
+          Simulación informativa (no modifica datos) tomando los costos
+          acumulados actuales de{' '}
+          <strong>
+            $ {formatearNumero(reporte.costosTotalesAcumulados)}
+          </strong>{' '}
+          sobre <strong>{formatearNumero(reporte.superficieHa)} ha</strong>.
+        </p>
 
-          <div className="fila-campos" style={{ marginBottom: '0.75rem' }}>
-            <div className="campo">
-              <label htmlFor="sim-rinde-ha">Rinde estimado (t / ha)</label>
-              <input
-                id="sim-rinde-ha"
-                type="number"
-                step="0.01"
-                min="0"
-                value={rindeSimuladoHa}
-                onChange={(e) => setRindeSimuladoHa(e.target.value)}
-              />
-            </div>
-            <div className="campo">
-              <label htmlFor="sim-precio-ton">Precio de venta ($ / t)</label>
-              <input
-                id="sim-precio-ton"
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={precioSimuladoTon}
-                onChange={(e) => setPrecioSimuladoTon(e.target.value)}
-              />
-            </div>
+        <div className="fila-campos" style={{ marginBottom: '0.75rem' }}>
+          <div className="campo">
+            <label htmlFor="sim-rinde-ha">Rinde estimado (t / ha)</label>
+            <input
+              id="sim-rinde-ha"
+              type="number"
+              step="0.01"
+              min="0"
+              value={rindeSimuladoHa}
+              onChange={(e) => setRindeSimuladoHa(e.target.value)}
+            />
           </div>
+          <div className="campo">
+            <label htmlFor="sim-precio-ton">Precio de venta ($ / t)</label>
+            <input
+              id="sim-precio-ton"
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={precioSimuladoTon}
+              onChange={(e) => setPrecioSimuladoTon(e.target.value)}
+            />
+          </div>
+        </div>
 
-          {simulacion && (
-            <div className="resumen-ajuste" style={{ marginBottom: 0 }}>
-              <div>
-                <strong>Producción proyectada:</strong>{' '}
-                {formatearNumero(simulacion.toneladasProyectadas)} t
-              </div>
-              <div>
-                <strong>Ingreso bruto proyectado:</strong> ${' '}
-                {formatearNumero(simulacion.ingresoBrutoProyectado)}
-              </div>
-              <div>
-                <strong>Margen neto proyectado:</strong>{' '}
+        {simulacion && (
+          <div className="resumen-ajuste" style={{ marginBottom: 0 }}>
+            <div>
+              <strong>Producción proyectada:</strong>{' '}
+              {formatearNumero(simulacion.toneladasProyectadas)} t
+            </div>
+            <div>
+              <strong>Ingreso bruto proyectado:</strong> ${' '}
+              {formatearNumero(simulacion.ingresoBrutoProyectado)}
+            </div>
+            <div>
+              <strong>Margen neto proyectado:</strong>{' '}
+              <strong
+                className={
+                  simulacion.margenNetoProyectado >= 0
+                    ? 'texto-exito'
+                    : 'texto-peligro'
+                }
+              >
+                $ {formatearNumero(simulacion.margenNetoProyectado)}
+              </strong>
+            </div>
+            <div>
+              <strong>ROI proyectado:</strong>{' '}
+              {simulacion.roiProyectado !== null ? (
                 <strong
                   className={
-                    simulacion.margenNetoProyectado >= 0
+                    simulacion.roiProyectado >= 0
                       ? 'texto-exito'
                       : 'texto-peligro'
                   }
                 >
-                  $ {formatearNumero(simulacion.margenNetoProyectado)}
+                  {formatearNumero(simulacion.roiProyectado)} %
                 </strong>
-              </div>
-              <div>
-                <strong>ROI proyectado:</strong>{' '}
-                {simulacion.roiProyectado !== null ? (
-                  <strong
-                    className={
-                      simulacion.roiProyectado >= 0
-                        ? 'texto-exito'
-                        : 'texto-peligro'
-                    }
-                  >
-                    {formatearNumero(simulacion.roiProyectado)} %
-                  </strong>
-                ) : (
-                  <span className="texto-suave">Sin costos registrados</span>
-                )}
-              </div>
-              {costosAcumulados > 0 && (
-                <div>
-                  <strong>Rinde de equilibrio (break-even):</strong>{' '}
-                  {formatearNumero(simulacion.rindeEquilibrioHa)} t/ha (
-                  {formatearNumero(simulacion.toneladasEquilibrio)} t totales)
-                </div>
+              ) : (
+                <span className="texto-suave">Sin costos registrados</span>
               )}
             </div>
-          )}
-        </div>
-      )}
+            {costosAcumulados > 0 && (
+              <div>
+                <strong>Rinde de equilibrio (break-even):</strong>{' '}
+                {formatearNumero(simulacion.rindeEquilibrioHa)} t/ha (
+                {formatearNumero(simulacion.toneladasEquilibrio)} t totales)
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="modal__pie">
+        {reporte.laboresCompletadas && reporte.laboresCompletadas.length > 0 && (
+          <button
+            type="button"
+            className="btn btn--secundario"
+            onClick={() => exportarDesgloseLoteCsv(reporte)}
+          >
+            Exportar desglose CSV
+          </button>
+        )}
         <button
           type="button"
           className="btn btn--secundario"

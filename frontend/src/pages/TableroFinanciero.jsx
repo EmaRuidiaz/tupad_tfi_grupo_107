@@ -16,6 +16,26 @@ const FILTROS_ESTADO_ROI = [
   { valor: 'SIN_COSTOS', etiqueta: 'Sin costos registrados' },
 ]
 
+const OPCIONES_ALCANCE_CICLO = [
+  {
+    valor: 'HISTORICO',
+    etiqueta: 'Acumulado histórico (todas las campañas)',
+  },
+  {
+    valor: 'ULTIMO_CICLO',
+    etiqueta: 'Último ciclo productivo (RN-12)',
+  },
+]
+
+const OPCIONES_ORDEN = [
+  { valor: 'LOTE_ASC', etiqueta: 'Ordenar por: Lote (#ID)' },
+  { valor: 'ROI_DESC', etiqueta: 'Ordenar por: Mayor ROI (%)' },
+  { valor: 'ROI_ASC', etiqueta: 'Ordenar por: Menor ROI (%)' },
+  { valor: 'MARGEN_DESC', etiqueta: 'Ordenar por: Mayor Margen Neto ($)' },
+  { valor: 'COSTO_DESC', etiqueta: 'Ordenar por: Mayor Costo Total ($)' },
+  { valor: 'COSTO_HA_DESC', etiqueta: 'Ordenar por: Mayor Costo / ha ($/ha)' },
+]
+
 function claseEtiquetaEstadoRoi(reporte) {
   if (reporte.estadoRoi === 'CALCULADO') {
     return Number(reporte.roiPct) >= 0
@@ -26,6 +46,82 @@ function claseEtiquetaEstadoRoi(reporte) {
     return 'etiqueta etiqueta--advertencia'
   }
   return 'etiqueta etiqueta--info'
+}
+
+function escaparCeldaCsv(valor) {
+  if (valor === null || valor === undefined) return ''
+  const texto = String(valor).replace(/"/g, '""')
+  return /[",;\n]/.test(texto) ? `"${texto}"` : texto
+}
+
+function exportarLotesCsv(lotes, alcanceCiclo) {
+  const encabezados = [
+    'ID Lote',
+    'Lote',
+    'Superficie (ha)',
+    'Estado Lote',
+    'Tipo Suelo',
+    'Labores Completadas',
+    'Horas Maquina',
+    'Costo Insumos ($)',
+    'Costo Maquinaria ($)',
+    'Costo Total Acumulado ($)',
+    'Costo por ha ($/ha)',
+    'Cosecha Registrada',
+    'Cultivo',
+    'Fecha Ultima Cosecha',
+    'Produccion (t)',
+    'Rinde (t/ha)',
+    'Ingreso Bruto ($)',
+    'Margen Neto ($)',
+    'Margen por ha ($/ha)',
+    'ROI (%)',
+    'Estado ROI',
+    'Alcance Ciclo',
+  ]
+
+  const filas = lotes.map((item) => [
+    item.loteId,
+    item.loteNombre,
+    item.superficieHa ?? 0,
+    etiquetaEstadoLote(item.estadoLote),
+    item.tipoSuelo || '',
+    item.cantidadLaboresCompletadas ?? 0,
+    item.horasMaquinaTotales ?? 0,
+    item.costoInsumosAcumulado ?? 0,
+    item.costoMaquinariaAcumulado ?? 0,
+    item.costosTotalesAcumulados ?? 0,
+    item.costoPorHa ?? 0,
+    item.cosechaRegistrada ? 'SI' : 'NO',
+    item.cultivoNombre || '',
+    item.fechaUltimaCosecha || '',
+    item.toneladasTotales ?? '',
+    item.rindeTonPorHa ?? '',
+    item.ingresoBrutoTotal ?? '',
+    item.margenNeto ?? '',
+    item.margenPorHa ?? '',
+    item.roiPct ?? '',
+    item.estadoRoi || '',
+    alcanceCiclo,
+  ])
+
+  const contenido = [
+    encabezados.map(escaparCeldaCsv).join(','),
+    ...filas.map((fila) => fila.map(escaparCeldaCsv).join(',')),
+  ].join('\r\n')
+
+  const blob = new Blob([`\uFEFF${contenido}`], {
+    type: 'text/csv;charset=utf-8;',
+  })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  const hoy = new Date().toISOString().slice(0, 10)
+  link.download = `tablero_financiero_agtech_${alcanceCiclo.toLowerCase()}_${hoy}.csv`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
 function TableroFinanciero() {
@@ -40,33 +136,70 @@ function TableroFinanciero() {
   const [estadoLoteFiltro, setEstadoLoteFiltro] = useState('TODOS')
   const [estadoRoiFiltro, setEstadoRoiFiltro] = useState('TODOS')
   const [soloConCosecha, setSoloConCosecha] = useState(false)
+  const [alcanceCiclo, setAlcanceCiclo] = useState('HISTORICO')
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
+  const [ordenTabla, setOrdenTabla] = useState('LOTE_ASC')
 
   const [loteDetalle, setLoteDetalle] = useState(null)
 
-  const recargarTablero = useCallback(async () => {
-    if (!tienePermiso) return
-    setErrorGlobal('')
-    setCargando(true)
-    try {
-      const datos = await obtenerTableroFinanciero()
-      setTablero(datos)
-    } catch (err) {
-      setErrorGlobal(
-        err.message || 'No se pudo cargar el tablero financiero.',
-      )
-    } finally {
-      setCargando(false)
-    }
-  }, [tienePermiso])
+  const recargarTablero = useCallback(
+    async (override = {}) => {
+      if (!tienePermiso) return
+      const desde =
+        override.fechaDesde !== undefined ? override.fechaDesde : fechaDesde
+      const hasta =
+        override.fechaHasta !== undefined ? override.fechaHasta : fechaHasta
+      const alcance =
+        override.alcanceCiclo !== undefined
+          ? override.alcanceCiclo
+          : alcanceCiclo
+
+      if (desde && hasta && desde > hasta) {
+        setErrorGlobal(
+          'La fecha inicial (Desde) no puede ser posterior a la fecha final (Hasta).',
+        )
+        return
+      }
+
+      setErrorGlobal('')
+      setCargando(true)
+      try {
+        const datos = await obtenerTableroFinanciero({
+          fechaDesde: desde || undefined,
+          fechaHasta: hasta || undefined,
+          alcanceCiclo: alcance,
+        })
+        setTablero(datos)
+      } catch (err) {
+        setErrorGlobal(
+          err.message || 'No se pudo cargar el tablero financiero.',
+        )
+      } finally {
+        setCargando(false)
+      }
+    },
+    [tienePermiso, fechaDesde, fechaHasta, alcanceCiclo],
+  )
 
   useEffect(() => {
     if (!tienePermiso) {
       return
     }
+    if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
+      return
+    }
     let cancelado = false
-    obtenerTableroFinanciero()
+    obtenerTableroFinanciero({
+      fechaDesde: fechaDesde || undefined,
+      fechaHasta: fechaHasta || undefined,
+      alcanceCiclo,
+    })
       .then((datos) => {
-        if (!cancelado) setTablero(datos)
+        if (!cancelado) {
+          setErrorGlobal('')
+          setTablero(datos)
+        }
       })
       .catch((err) => {
         if (!cancelado) {
@@ -81,13 +214,13 @@ function TableroFinanciero() {
     return () => {
       cancelado = true
     }
-  }, [tienePermiso])
+  }, [tienePermiso, fechaDesde, fechaHasta, alcanceCiclo])
 
   const lotes = useMemo(() => tablero?.lotes ?? [], [tablero])
 
   const lotesFiltrados = useMemo(() => {
     const texto = busqueda.trim().toLowerCase()
-    return lotes.filter((item) => {
+    const filtrados = lotes.filter((item) => {
       if (soloConCosecha && !item.cosechaRegistrada) {
         return false
       }
@@ -109,7 +242,63 @@ function TableroFinanciero() {
       }
       return true
     })
-  }, [lotes, soloConCosecha, estadoLoteFiltro, estadoRoiFiltro, busqueda])
+
+    const copia = [...filtrados]
+    copia.sort((a, b) => {
+      if (ordenTabla === 'ROI_DESC') {
+        const roiA =
+          a.roiPct !== null && a.roiPct !== undefined
+            ? Number(a.roiPct)
+            : Number.NEGATIVE_INFINITY
+        const roiB =
+          b.roiPct !== null && b.roiPct !== undefined
+            ? Number(b.roiPct)
+            : Number.NEGATIVE_INFINITY
+        return roiB - roiA
+      }
+      if (ordenTabla === 'ROI_ASC') {
+        const roiA =
+          a.roiPct !== null && a.roiPct !== undefined
+            ? Number(a.roiPct)
+            : Number.POSITIVE_INFINITY
+        const roiB =
+          b.roiPct !== null && b.roiPct !== undefined
+            ? Number(b.roiPct)
+            : Number.POSITIVE_INFINITY
+        return roiA - roiB
+      }
+      if (ordenTabla === 'MARGEN_DESC') {
+        const mA =
+          a.margenNeto !== null && a.margenNeto !== undefined
+            ? Number(a.margenNeto)
+            : Number.NEGATIVE_INFINITY
+        const mB =
+          b.margenNeto !== null && b.margenNeto !== undefined
+            ? Number(b.margenNeto)
+            : Number.NEGATIVE_INFINITY
+        return mB - mA
+      }
+      if (ordenTabla === 'COSTO_DESC') {
+        return (
+          Number(b.costosTotalesAcumulados || 0) -
+          Number(a.costosTotalesAcumulados || 0)
+        )
+      }
+      if (ordenTabla === 'COSTO_HA_DESC') {
+        return Number(b.costoPorHa || 0) - Number(a.costoPorHa || 0)
+      }
+      return Number(a.loteId || 0) - Number(b.loteId || 0)
+    })
+
+    return copia
+  }, [
+    lotes,
+    soloConCosecha,
+    estadoLoteFiltro,
+    estadoRoiFiltro,
+    busqueda,
+    ordenTabla,
+  ])
 
   const maximoMontoEscala = useMemo(() => {
     const valores = lotesFiltrados.flatMap((l) => [
@@ -119,6 +308,28 @@ function TableroFinanciero() {
     const max = valores.length > 0 ? Math.max(...valores) : 0
     return max > 0 ? max : 1
   }, [lotesFiltrados])
+
+  const hayFiltrosActivos =
+    Boolean(busqueda.trim()) ||
+    estadoLoteFiltro !== 'TODOS' ||
+    estadoRoiFiltro !== 'TODOS' ||
+    soloConCosecha ||
+    alcanceCiclo !== 'HISTORICO' ||
+    Boolean(fechaDesde) ||
+    Boolean(fechaHasta) ||
+    ordenTabla !== 'LOTE_ASC'
+
+  function limpiarFiltros() {
+    setBusqueda('')
+    setEstadoLoteFiltro('TODOS')
+    setEstadoRoiFiltro('TODOS')
+    setSoloConCosecha(false)
+    setAlcanceCiclo('HISTORICO')
+    setFechaDesde('')
+    setFechaHasta('')
+    setOrdenTabla('LOTE_ASC')
+    setErrorGlobal('')
+  }
 
   if (!tienePermiso) {
     return (
@@ -150,7 +361,7 @@ function TableroFinanciero() {
           <p className="pagina__subtitulo">
             Consolidación económica por lote: comparación de Ingresos Brutos de
             cosecha vs. Costos Totales Acumulados de labores completadas,
-            Margen Neto y Retorno de Inversión (HU-13 / RF-08).
+            Margen Neto y Retorno de Inversión (HU-13 / RF-08 / RN-12).
           </p>
         </div>
 
@@ -158,7 +369,15 @@ function TableroFinanciero() {
           <button
             type="button"
             className="btn btn--secundario"
-            onClick={recargarTablero}
+            onClick={() => exportarLotesCsv(lotesFiltrados, alcanceCiclo)}
+            disabled={cargando || lotesFiltrados.length === 0}
+          >
+            Exportar CSV ({lotesFiltrados.length})
+          </button>
+          <button
+            type="button"
+            className="btn btn--secundario"
+            onClick={() => recargarTablero()}
             disabled={cargando}
           >
             Actualizar métricas
@@ -256,6 +475,22 @@ function TableroFinanciero() {
 
         <select
           className="select-filtro"
+          value={alcanceCiclo}
+          onChange={(e) => {
+            setCargando(true)
+            setAlcanceCiclo(e.target.value)
+          }}
+          aria-label="Seleccionar alcance de ciclo productivo"
+        >
+          {OPCIONES_ALCANCE_CICLO.map((op) => (
+            <option key={op.valor} value={op.valor}>
+              {op.etiqueta}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="select-filtro"
           value={estadoLoteFiltro}
           onChange={(e) => setEstadoLoteFiltro(e.target.value)}
           aria-label="Filtrar por estado agronómico del lote"
@@ -281,6 +516,61 @@ function TableroFinanciero() {
           ))}
         </select>
 
+        <select
+          className="select-filtro"
+          value={ordenTabla}
+          onChange={(e) => setOrdenTabla(e.target.value)}
+          aria-label="Ordenar lotes"
+        >
+          {OPCIONES_ORDEN.map((op) => (
+            <option key={op.valor} value={op.valor}>
+              {op.etiqueta}
+            </option>
+          ))}
+        </select>
+
+        <label className="check-filtro" title="Fecha inicial del período">
+          <span className="texto-chico texto-suave">Desde:</span>
+          <input
+            type="date"
+            className="input-filtro"
+            style={{ minWidth: '140px', padding: '0.35rem 0.5rem' }}
+            value={fechaDesde}
+            onChange={(e) => {
+              const nuevoDesde = e.target.value
+              if (nuevoDesde && fechaHasta && nuevoDesde > fechaHasta) {
+                setErrorGlobal(
+                  'La fecha inicial (Desde) no puede ser posterior a la fecha final (Hasta).',
+                )
+              } else {
+                setCargando(true)
+              }
+              setFechaDesde(nuevoDesde)
+            }}
+          />
+        </label>
+
+        <label className="check-filtro" title="Fecha final del período">
+          <span className="texto-chico texto-suave">Hasta:</span>
+          <input
+            type="date"
+            className="input-filtro"
+            style={{ minWidth: '140px', padding: '0.35rem 0.5rem' }}
+            value={fechaHasta}
+            onChange={(e) => {
+              const nuevoHasta = e.target.value
+              if (fechaDesde && nuevoHasta && fechaDesde > nuevoHasta) {
+                setErrorGlobal(
+                  'La fecha inicial (Desde) no puede ser posterior a la fecha final (Hasta).',
+                )
+              } else {
+                setCargando(true)
+              }
+              setFechaHasta(nuevoHasta)
+            }}
+          />
+        </label>
+
         <label className="check-filtro">
           <input
             type="checkbox"
@@ -289,6 +579,16 @@ function TableroFinanciero() {
           />
           <span>Solo con cosecha ({tablero?.lotesConCosecha ?? 0})</span>
         </label>
+
+        {hayFiltrosActivos && (
+          <button
+            type="button"
+            className="btn btn--secundario btn--chico"
+            onClick={limpiarFiltros}
+          >
+            Limpiar filtros
+          </button>
+        )}
       </div>
 
       {cargando ? (
@@ -309,8 +609,14 @@ function TableroFinanciero() {
                 <p className="texto-suave texto-chico" style={{ margin: 0 }}>
                   Escala relativa al mayor monto registrado ($
                   {' '}
-                  {formatearNumero(maximoMontoEscala)}). Hacé clic en «Desglose»
-                  para inspeccionar órdenes de trabajo o simular escenarios.
+                  {formatearNumero(maximoMontoEscala)}) · Modo:{' '}
+                  <strong>
+                    {alcanceCiclo === 'ULTIMO_CICLO'
+                      ? 'Último ciclo productivo (RN-12)'
+                      : 'Acumulado histórico'}
+                  </strong>
+                  . Hacé clic en «Desglose» para inspeccionar órdenes por tipo
+                  de labor o simular punto de equilibrio.
                 </p>
               </div>
               <div className="grafico-financiero__leyenda">

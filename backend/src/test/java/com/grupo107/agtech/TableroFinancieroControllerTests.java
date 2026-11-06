@@ -60,6 +60,13 @@ class TableroFinancieroControllerTests {
     }
 
     private RegistroCosecha registrarCosechaFixture(Long loteId, String toneladas, String precioPorTon) {
+        return registrarCosechaFixtureConFecha(loteId, toneladas, precioPorTon, LocalDate.of(2026, 10, 20));
+    }
+
+    private RegistroCosecha registrarCosechaFixtureConFecha(Long loteId,
+                                                            String toneladas,
+                                                            String precioPorTon,
+                                                            LocalDate fechaCosecha) {
         Lote lote = loteRepository.findById(loteId).orElseThrow();
         Cultivo soja = cultivoRepository.findById(1L).orElseThrow();
 
@@ -74,7 +81,7 @@ class TableroFinancieroControllerTests {
         RegistroCosecha cosecha = new RegistroCosecha();
         cosecha.setLote(lote);
         cosecha.setCultivo(soja);
-        cosecha.setFechaCosecha(LocalDate.of(2026, 10, 20));
+        cosecha.setFechaCosecha(fechaCosecha);
         cosecha.setToneladasTotales(ton);
         cosecha.setRindeTonPorHa(rinde);
         cosecha.setPrecioVentaPorTon(precio);
@@ -256,5 +263,56 @@ class TableroFinancieroControllerTests {
         mockMvc.perform(get("/api/tablero-financiero/lotes/999")
                         .header("Authorization", token))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void permiteFiltrarPorRangoDeFechasYAlcanceDeCicloProductivoYRechazaRangoInvalido() throws Exception {
+        // En data.sql para Lote 1:
+        // Labor #1 (SIEMBRA): ejecutada 2026-05-10 ($7231.50)
+        // Labor #2 (PULVERIZACION): ejecutada 2026-06-20 ($2587.30)
+        // Registramos una primera cosecha el 2026-06-01 ($50,000) y una segunda el 2026-10-20 ($130,200).
+        registrarCosechaFixtureConFecha(1L, "200.00", "250.00", LocalDate.of(2026, 6, 1));
+        registrarCosechaFixtureConFecha(1L, "420.00", "310.00", LocalDate.of(2026, 10, 20));
+
+        String token = bearer("admin");
+
+        // 1. Modo HISTORICO (default): incluye las 2 labores ($9818.80) y las 2 cosechas ($180,200.00)
+        mockMvc.perform(get("/api/tablero-financiero/lotes/1")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cantidadLaboresCompletadas").value(2))
+                .andExpect(jsonPath("$.costosTotalesAcumulados").value(9818.80))
+                .andExpect(jsonPath("$.cantidadCosechas").value(2))
+                .andExpect(jsonPath("$.ingresoBrutoTotal").value(180200.00));
+
+        // 2. Modo ULTIMO_CICLO (RN-12): delimita la ventana (2026-06-01, 2026-10-20],
+        // incluyendo sólo la Labor #2 del 2026-06-20 ($2587.30) y la última cosecha ($130,200.00)
+        mockMvc.perform(get("/api/tablero-financiero/lotes/1")
+                        .param("alcanceCiclo", "ULTIMO_CICLO")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cantidadLaboresCompletadas").value(1))
+                .andExpect(jsonPath("$.costosTotalesAcumulados").value(2587.30))
+                .andExpect(jsonPath("$.cantidadCosechas").value(1))
+                .andExpect(jsonPath("$.ingresoBrutoTotal").value(130200.00))
+                .andExpect(jsonPath("$.margenNeto").value(127612.70));
+
+        // 3. Filtro por fechaDesde / fechaHasta acotado a mayo-junio 2026 (2026-05-01 a 2026-06-01)
+        mockMvc.perform(get("/api/tablero-financiero/lotes/1")
+                        .param("fechaDesde", "2026-05-01")
+                        .param("fechaHasta", "2026-06-01")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cantidadLaboresCompletadas").value(1))
+                .andExpect(jsonPath("$.costosTotalesAcumulados").value(7231.50))
+                .andExpect(jsonPath("$.cantidadCosechas").value(1))
+                .andExpect(jsonPath("$.ingresoBrutoTotal").value(50000.00));
+
+        // 4. Rango inválido (fechaDesde > fechaHasta) -> 400 Bad Request
+        mockMvc.perform(get("/api/tablero-financiero")
+                        .param("fechaDesde", "2026-12-01")
+                        .param("fechaHasta", "2026-01-01")
+                        .header("Authorization", token))
+                .andExpect(status().isBadRequest());
     }
 }

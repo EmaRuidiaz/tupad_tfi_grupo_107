@@ -1,20 +1,11 @@
 import { apiFetch } from './api.js'
 
-export function obtenerTableroFinanciero({ estadoLote, soloConCosecha } = {}) {
-  const params = new URLSearchParams()
-  if (estadoLote && estadoLote !== 'TODOS') {
-    params.set('estadoLote', estadoLote)
-  }
-  if (soloConCosecha) {
-    params.set('soloConCosecha', 'true')
-  }
-  const query = params.toString()
-  return apiFetch(`/tablero-financiero${query ? `?${query}` : ''}`)
-}
-
-export function listarReportesFinancierosLotes({
+function construirQueryTablero({
   estadoLote,
   soloConCosecha,
+  fechaDesde,
+  fechaHasta,
+  alcanceCiclo,
 } = {}) {
   const params = new URLSearchParams()
   if (estadoLote && estadoLote !== 'TODOS') {
@@ -23,10 +14,29 @@ export function listarReportesFinancierosLotes({
   if (soloConCosecha) {
     params.set('soloConCosecha', 'true')
   }
-  const query = params.toString()
+  if (fechaDesde) {
+    params.set('fechaDesde', fechaDesde)
+  }
+  if (fechaHasta) {
+    params.set('fechaHasta', fechaHasta)
+  }
+  if (alcanceCiclo && alcanceCiclo !== 'HISTORICO') {
+    params.set('alcanceCiclo', alcanceCiclo)
+  }
+  return params.toString()
+}
+
+export function obtenerTableroFinanciero(filtros = {}) {
+  const query = construirQueryTablero(filtros)
+  return apiFetch(`/tablero-financiero${query ? `?${query}` : ''}`)
+}
+
+export function listarReportesFinancierosLotes(filtros = {}) {
+  const query = construirQueryTablero(filtros)
   return apiFetch(`/tablero-financiero/lotes${query ? `?${query}` : ''}`)
 }
 
-export function obtenerReporteFinancieroLote(loteId) {
-  return apiFetch(`/tablero-financiero/lotes/${loteId}`)
+export function obtenerReporteFinancieroLote(loteId, filtros = {}) {
+  const query = construirQueryTablero(filtros)
+  return apiFetch(`/tablero-financiero/lotes/${loteId}${query ? `?${query}` : ''}`)
 }

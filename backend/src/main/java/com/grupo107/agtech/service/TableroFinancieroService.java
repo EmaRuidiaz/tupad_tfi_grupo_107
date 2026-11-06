@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,9 @@ public class TableroFinancieroService {
     public static final String ESTADO_ROI_CALCULADO = "CALCULADO";
     public static final String ESTADO_ROI_PENDIENTE = "PENDIENTE";
     public static final String ESTADO_ROI_SIN_COSTOS = "SIN_COSTOS";
+
+    public static final String ALCANCE_HISTORICO = "HISTORICO";
+    public static final String ALCANCE_ULTIMO_CICLO = "ULTIMO_CICLO";
 
     private static final Set<EstadoLabor> ESTADOS_LABOR_PENDIENTES = EnumSet.of(
             EstadoLabor.PLANIFICADA,
@@ -56,7 +60,18 @@ public class TableroFinancieroService {
 
     @Transactional(readOnly = true)
     public TableroFinancieroResponse obtenerTablero(EstadoLote estadoLote, Boolean soloConCosecha) {
-        List<ReporteFinancieroLoteResponse> lotes = listarReportesPorLote(estadoLote, soloConCosecha);
+        return obtenerTablero(estadoLote, soloConCosecha, null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public TableroFinancieroResponse obtenerTablero(EstadoLote estadoLote,
+                                                    Boolean soloConCosecha,
+                                                    LocalDate fechaDesde,
+                                                    LocalDate fechaHasta,
+                                                    String alcanceCiclo) {
+        List<ReporteFinancieroLoteResponse> lotes = listarReportesPorLote(
+                estadoLote, soloConCosecha, fechaDesde, fechaHasta, alcanceCiclo
+        );
 
         int totalLotes = lotes.size();
         int lotesConCosecha = (int) lotes.stream().filter(ReporteFinancieroLoteResponse::isCosechaRegistrada).count();
@@ -157,6 +172,17 @@ public class TableroFinancieroService {
 
     @Transactional(readOnly = true)
     public List<ReporteFinancieroLoteResponse> listarReportesPorLote(EstadoLote estadoLote, Boolean soloConCosecha) {
+        return listarReportesPorLote(estadoLote, soloConCosecha, null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReporteFinancieroLoteResponse> listarReportesPorLote(EstadoLote estadoLote,
+                                                                     Boolean soloConCosecha,
+                                                                     LocalDate fechaDesde,
+                                                                     LocalDate fechaHasta,
+                                                                     String alcanceCiclo) {
+        validarRangoFechas(fechaDesde, fechaHasta);
+
         List<Lote> lotes = estadoLote != null
                 ? loteRepository.findByEstadoOrderByIdAsc(estadoLote)
                 : loteRepository.findAllByOrderByIdAsc();
@@ -180,7 +206,10 @@ public class TableroFinancieroService {
                 .map(lote -> construirReporteLote(
                         lote,
                         laboresPorLote.getOrDefault(lote.getId(), List.of()),
-                        cosechasPorLote.getOrDefault(lote.getId(), List.of())
+                        cosechasPorLote.getOrDefault(lote.getId(), List.of()),
+                        fechaDesde,
+                        fechaHasta,
+                        alcanceCiclo
                 ))
                 .filter(r -> !Boolean.TRUE.equals(soloConCosecha) || r.isCosechaRegistrada())
                 .toList();
@@ -188,6 +217,16 @@ public class TableroFinancieroService {
 
     @Transactional(readOnly = true)
     public ReporteFinancieroLoteResponse obtenerReportePorLote(Long loteId) {
+        return obtenerReportePorLote(loteId, null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public ReporteFinancieroLoteResponse obtenerReportePorLote(Long loteId,
+                                                               LocalDate fechaDesde,
+                                                               LocalDate fechaHasta,
+                                                               String alcanceCiclo) {
+        validarRangoFechas(fechaDesde, fechaHasta);
+
         Lote lote = loteRepository.findById(loteId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Lote no encontrado con id: " + loteId));
@@ -195,20 +234,99 @@ public class TableroFinancieroService {
         List<LaborAgricola> labores = laborRepository.findByLoteIdOrderByFechaPlanificadaDescIdDesc(loteId);
         List<RegistroCosecha> cosechas = cosechaRepository.findByLoteIdOrderByFechaCosechaDescIdDesc(loteId);
 
-        return construirReporteLote(lote, labores, cosechas);
+        return construirReporteLote(lote, labores, cosechas, fechaDesde, fechaHasta, alcanceCiclo);
+    }
+
+    private void validarRangoFechas(LocalDate fechaDesde, LocalDate fechaHasta) {
+        if (fechaDesde != null && fechaHasta != null && fechaDesde.isAfter(fechaHasta)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "La fechaDesde (" + fechaDesde + ") no puede ser posterior a fechaHasta (" + fechaHasta + ")");
+        }
+    }
+
+    private LocalDate obtenerFechaEfectivaLabor(LaborAgricola labor) {
+        LocalDateTime fechaBase = labor.getFechaEjecucion() != null
+                ? labor.getFechaEjecucion()
+                : labor.getFechaPlanificada();
+        return fechaBase != null ? fechaBase.toLocalDate() : null;
+    }
+
+    private boolean dentroDeRango(LocalDate fecha, LocalDate fechaDesde, LocalDate fechaHasta) {
+        if (fecha == null) {
+            return fechaDesde == null && fechaHasta == null;
+        }
+        if (fechaDesde != null && fecha.isBefore(fechaDesde)) {
+            return false;
+        }
+        if (fechaHasta != null && fecha.isAfter(fechaHasta)) {
+            return false;
+        }
+        return true;
     }
 
     private ReporteFinancieroLoteResponse construirReporteLote(
             Lote lote,
             List<LaborAgricola> laboresDelLote,
-            List<RegistroCosecha> cosechasDelLote) {
+            List<RegistroCosecha> cosechasDelLote,
+            LocalDate fechaDesde,
+            LocalDate fechaHasta,
+            String alcanceCiclo) {
 
         BigDecimal superficieHa = lote.getSuperficieHa() != null
                 ? lote.getSuperficieHa().setScale(2, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
-        List<CostoLaborResumenResponse> laboresCompletadas = laboresDelLote.stream()
+        // 1. Filtrado por rango explícito de fechas (si fue solicitado)
+        List<RegistroCosecha> cosechasEnRango = cosechasDelLote.stream()
+                .filter(c -> dentroDeRango(c.getFechaCosecha(), fechaDesde, fechaHasta))
+                .toList();
+
+        List<LaborAgricola> laboresCompletadasEnRango = laboresDelLote.stream()
                 .filter(l -> l.getEstado() == EstadoLabor.COMPLETADA)
+                .filter(l -> dentroDeRango(obtenerFechaEfectivaLabor(l), fechaDesde, fechaHasta))
+                .toList();
+
+        // 2. Delimitación por ventana de ciclo productivo (RN-12: ULTIMO_CICLO vs HISTORICO)
+        boolean modoUltimoCiclo = ALCANCE_ULTIMO_CICLO.equalsIgnoreCase(alcanceCiclo);
+        List<RegistroCosecha> cosechasEvaluadas = cosechasEnRango;
+        List<LaborAgricola> laboresEvaluadas = laboresCompletadasEnRango;
+
+        if (modoUltimoCiclo && !cosechasEnRango.isEmpty()) {
+            RegistroCosecha ultimaCosecha = cosechasEnRango.get(0);
+            LocalDate fechaCierreCiclo = ultimaCosecha.getFechaCosecha();
+            LocalDate fechaInicioExclusiva = cosechasEnRango.size() > 1
+                    ? cosechasEnRango.get(1).getFechaCosecha()
+                    : null;
+
+            // Si el lote ya reingresó a una nueva campaña activa posterior a la última cosecha
+            // y existen labores completadas posteriores a esa cosecha, evaluamos la campaña en curso.
+            List<LaborAgricola> laboresCampanaEnCurso = fechaCierreCiclo != null
+                    ? laboresCompletadasEnRango.stream()
+                            .filter(l -> {
+                                LocalDate f = obtenerFechaEfectivaLabor(l);
+                                return f != null && f.isAfter(fechaCierreCiclo);
+                            })
+                            .toList()
+                    : List.of();
+
+            if (lote.getEstado() != EstadoLote.COSECHADO && !laboresCampanaEnCurso.isEmpty()) {
+                cosechasEvaluadas = List.of();
+                laboresEvaluadas = laboresCampanaEnCurso;
+            } else {
+                cosechasEvaluadas = List.of(ultimaCosecha);
+                laboresEvaluadas = laboresCompletadasEnRango.stream()
+                        .filter(l -> {
+                            LocalDate f = obtenerFechaEfectivaLabor(l);
+                            if (f == null) return true;
+                            boolean despuesDeAnterior = fechaInicioExclusiva == null || f.isAfter(fechaInicioExclusiva);
+                            boolean hastaCierre = fechaCierreCiclo == null || !f.isAfter(fechaCierreCiclo);
+                            return despuesDeAnterior && hastaCierre;
+                        })
+                        .toList();
+            }
+        }
+
+        List<CostoLaborResumenResponse> laboresCompletadas = laboresEvaluadas.stream()
                 .map(CostoLaborResumenResponse::from)
                 .toList();
 
@@ -239,7 +357,7 @@ public class TableroFinancieroService {
                 ? costosTotalesAcumulados.divide(superficieHa, 2, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
-        List<CosechaResumenResponse> cosechas = cosechasDelLote.stream()
+        List<CosechaResumenResponse> cosechas = cosechasEvaluadas.stream()
                 .map(CosechaResumenResponse::from)
                 .toList();
 
