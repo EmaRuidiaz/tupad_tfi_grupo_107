@@ -10,10 +10,11 @@ A continuación se detalla la descomposición funcional del software, incorporan
   * Autorización por rol según la matriz de permisos (ver doc 07, sección 7.2).
 
 ### Módulo 2: Catastro y Gestión de Lotes (ABM) con Soporte GIS
-* **Objetivo:** Administrar las parcelas agrícolas.
+* **Objetivo:** Administrar las parcelas agrícolas y el ciclo de vida de cada campaña productiva.
 * **Funcionalidades:**
   * Almacenamiento de coordenadas centrales para clima.
   * Almacenamiento de Polígonos WKT (Well-Known Text) o integración con PostGIS para delimitar áreas, permitir futuros análisis espaciales y mapas de rendimiento.
+  * Gestión controlada de estados agronómicos del lote (`EN_PREPARACION` → `SEMBRADO` → `EN_CRECIMIENTO` → `LISTO_COSECHA` → `COSECHADO` / `DESCANSO`), delimitando el inicio y cierre de cada ciclo productivo (ver doc 02, sección 2.2).
 
 ### Módulo 3: Compras y Proveedores (NUEVO)
 * **Objetivo:** Registrar las adquisiciones de insumos y actualizar costos.
@@ -23,11 +24,12 @@ A continuación se detalla la descomposición funcional del software, incorporan
   * Generación de historial en `movimiento_stock` (Auditoría completa).
 
 ### Módulo 4: Inventario y Auditoría de Stock de Insumos
-* **Objetivo:** Trazabilidad estricta del inventario.
+* **Objetivo:** Trazabilidad estricta del inventario y consistencia ante accesos concurrentes.
 * **Funcionalidades:**
   * Alerta de stock crítico (ver Módulo 8).
   * Movimientos de Stock detallados (`INGRESO_COMPRA`, `EGRESO_LABOR`, `AJUSTE`).
   * Reserva lógica de stock para labores planificadas (`stock_reservado`), distinguiendo stock físico y stock disponible (ver doc 02, sección 2.1).
+  * Control de concurrencia pesimista (`SELECT ... FOR UPDATE`) y bloqueo ordenado por `insumo_id` para evitar sobreasignación de insumos o *deadlocks* en operaciones simultáneas (ver doc 07, sección 7.4).
 
 ### Módulo 5: Parque de Maquinaria y Mantenimiento Predictivo
 * **Objetivo:** Evitar downtime controlando horómetros.
@@ -54,16 +56,19 @@ A continuación se detalla la descomposición funcional del software, incorporan
   * **Clima adverso:** Avisos de reprogramación para labores en estado `BLOQUEADA_CLIMA`.
   * **Lotes listos:** Lotes que llevan más de 15 días en `LISTO_COSECHA`.
 
-### Módulo 9: Tablero Financiero (ROI por Lote)
-* **Objetivo:** Consolidar el resultado agronómico y económico final.
+### Módulo 9: Tablero Financiero (ROI por Lote y Campaña)
+* **Objetivo:** Consolidar el resultado agronómico y económico final por lote y ciclo productivo.
 * **Fórmula de ROI:** 
   Se define formalmente el Retorno de Inversión (ROI) como:
   **`ROI (%) = (Margen Neto / Costos Totales Acumulados) * 100`**
   Donde:
   - `Margen Neto` = `Ingreso Bruto` - `Costos Totales Acumulados`
   - `Ingreso Bruto` = `toneladas_totales * precio_venta_por_ton`
-  - `Costos Totales Acumulados` = Sumatoria de `costo_total_calculado` de todas las labores previas de ese lote.
-* **Aclaración de Diseño:** Campos como `margen_neto_calculado` y `costo_total_calculado` están desnormalizados (persistidos) en las tablas transaccionales por cuestiones de performance e inmutabilidad histórica, en lugar de ser recalculados dinámicamente en cada consulta.
+  - `Costos Totales Acumulados` = Sumatoria de `costo_total_calculado` de las labores en estado `COMPLETADA` ejecutadas en ese lote durante el ciclo productivo correspondiente.
+* **Alcance temporal y análisis histórico (Política de Cosechas, doc 02 §2.2):**
+  - Al cerrar un ciclo productivo mediante un `registro_cosecha`, su `margen_neto_calculado` queda consolidado e inmutable para ese ciclo (`fecha_cosecha_anterior < fecha_ejecucion <= fecha_cosecha_actual`), permitiendo consultar y comparar múltiples campañas históricas consecutivas de un mismo lote.
+  - Para lotes que cursan una campaña activa (sin cosecha registrada en el ciclo actual), el tablero exhibe los costos acumulados hasta el momento y el estado de ROI como `"Pendiente de cosecha"`.
+* **Aclaración de Diseño:** Campos como `margen_neto_calculado` y `costo_total_calculado` están desnormalizados (persistidos) en las tablas transaccionales por cuestiones de performance (RNF-02) e inmutabilidad histórica (RN-05), en lugar de ser recalculados con precios vigentes en cada consulta.
 
 ---
 ## 5. Justificación Tecnológica para la Entrega

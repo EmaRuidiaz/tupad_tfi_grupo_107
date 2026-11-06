@@ -38,7 +38,7 @@ Los requerimientos se priorizan con el método **MoSCoW**, considerando el valor
         4. Dado un lote con labores o cosechas asociadas, cuando se intenta eliminar, entonces el sistema lo impide (`409 Conflict`).
         5. Dado un cambio de estado del lote, cuando no corresponde a una transición permitida (doc 06, sección 6.3.1), entonces se rechaza.
 
-*   **RF-03 Gestión de Inventario y Compras:** El sistema debe registrar las compras a proveedores, actualizando automáticamente el stock de insumos y registrando un historial detallado de movimientos.
+*   **RF-03 Gestión de Inventario y Compras:** El sistema debe registrar las compras a proveedores, actualizando automáticamente el stock de insumos y registrando un historial detallado de movimientos bajo garantías de aislamiento transaccional.
     *   **Criterios de aceptación:**
         1. Dada una compra con al menos un detalle válido (cantidad mayor a 0), cuando se confirma, entonces se incrementa el `stock_actual` de cada insumo y se crea un `movimiento_stock` de tipo `INGRESO_COMPRA` por línea.
         2. Dada una compra confirmada, entonces `total_compra` es igual a la suma de los `subtotal` de sus detalles y el `precio_unitario` del insumo se actualiza al de la compra.
@@ -53,10 +53,10 @@ Los requerimientos se priorizan con el método **MoSCoW**, considerando el valor
         3. Dado el registro de un service, entonces se actualiza `horas_para_proximo_service` con el valor informado y la máquina vuelve a `OPERATIVO`.
         4. Dada una máquina en `EN_MANTENIMIENTO` o `FUERA_DE_SERVICIO`, cuando se intenta asignar a una labor, entonces el sistema lo impide.
 
-*   **RF-05 Gestión de Labores Agrícolas:** El sistema debe permitir programar, ejecutar y finalizar labores agrícolas en los lotes, descontando insumos del stock y calculando automáticamente el costo total en base a insumos y uso de maquinaria.
+*   **RF-05 Gestión de Labores Agrícolas:** El sistema debe permitir programar, ejecutar y finalizar labores agrícolas en los lotes, descontando insumos del stock con bloqueo pesimista ante concurrencia y calculando automáticamente el costo total en base a insumos y uso de maquinaria.
     *   **Criterios de aceptación:**
         1. Dada una labor programada cuyos insumos tienen stock disponible (`stock_actual - stock_reservado`) suficiente, entonces se crea en estado `PLANIFICADA` y los insumos quedan `RESERVADO`.
-        2. Dado un insumo sin stock disponible suficiente, cuando se programa la labor, entonces se rechaza indicando la cantidad faltante.
+        2. Dado un insumo sin stock disponible suficiente (incluso ante peticiones simultáneas serializadas mediante `SELECT ... FOR UPDATE`), cuando se programa la labor, entonces se rechaza indicando la cantidad faltante (`409 Conflict`).
         3. Dada una labor iniciada, entonces se descuenta el `stock_actual`, se libera la reserva y se registra un `EGRESO_LABOR` por insumo.
         4. Dada una labor completada, entonces `costo_total_calculado = Σ costo_subtotal + horas_maquina_consumidas × costo_operativo_hora` y ese valor no cambia aunque luego varíen los precios.
         5. Dada una labor `PLANIFICADA` o `BLOQUEADA_CLIMA` que se cancela, entonces sus reservas pasan a `LIBERADO` y se restan de `stock_reservado`.
@@ -77,10 +77,10 @@ Los requerimientos se priorizan con el método **MoSCoW**, considerando el valor
         4. Dado un lote que permanece más de 15 días en `LISTO_COSECHA`, entonces se genera una alerta de cosecha demorada.
         5. Dada una alerta ya generada y no resuelta, entonces no se duplica al volver a evaluarse la condición.
 
-*   **RF-08 Tablero Financiero (Dashboard):** El sistema debe calcular y mostrar métricas de rendimiento y rentabilidad, incluyendo ingresos brutos, costos totales acumulados y Retorno de Inversión (ROI) por lote.
+*   **RF-08 Tablero Financiero (Dashboard):** El sistema debe calcular y mostrar métricas de rendimiento y rentabilidad por lote y campaña/ciclo productivo, incluyendo ingresos brutos, costos totales acumulados y Retorno de Inversión (ROI).
     *   **Criterios de aceptación:**
-        1. Dado un lote con cosecha registrada, entonces el tablero muestra ingreso bruto, costos acumulados, margen neto y `ROI (%) = Margen Neto / Costos Totales Acumulados × 100`.
-        2. Dado un lote sin cosecha registrada, entonces se muestran sólo los costos acumulados y el ROI figura como "pendiente".
+        1. Dado un lote con cosecha registrada, entonces el tablero muestra ingreso bruto, costos acumulados, margen neto y `ROI (%) = Margen Neto / Costos Totales Acumulados × 100`, además del historial de sus cosechas por campaña (`RN-12`).
+        2. Dado un lote sin cosecha registrada en su ciclo actual, entonces se muestran sólo los costos acumulados y el ROI figura como "pendiente".
         3. Dado un lote con costos acumulados igual a 0, entonces el ROI no se calcula (se evita la división por cero) y se informa "sin costos registrados".
         4. Dado el tablero con hasta 500 lotes, entonces la respuesta no supera los 2 segundos (RNF-02).
 
@@ -90,14 +90,14 @@ Los requerimientos se priorizan con el método **MoSCoW**, considerando el valor
 | :--- | :--- | :--- | :--- |
 | RNF-01 | Seguridad y Auditoría | Must | 100% de las contraseñas almacenadas con BCrypt (factor ≥ 10). Toda operación de escritura sobre compras, labores, mantenimientos, cosechas y stock persiste el `usuario_id` responsable. |
 | RNF-02 | Rendimiento | Should | El percentil 95 de las consultas al tablero financiero responde en menos de 2 segundos con 500 lotes cargados. |
-| RNF-03 | Disponibilidad | Should | Disponibilidad mensual objetivo ≥ 99%. Una caída de la API climática no deja fuera de servicio a ningún otro módulo. |
+| RNF-03 | Disponibilidad y Respaldo | Should | Disponibilidad mensual $\ge 99{,}0\%$ ($\le 432$ min/mes de indisponibilidad no programada según fórmula de doc 09, sección 9.6). Una caída de la API climática no deja fuera de servicio a ningún otro módulo. Respaldo diario con $\text{RPO} \le 24\text{ h}$ y $\text{RTO} \le 2\text{ h}$ (doc 09, sección 9.7). |
 | RNF-04 | Compatibilidad Tecnológica | Must | El mismo `schema.sql` se ejecuta sin errores en H2 (perfil `dev`) y en PostgreSQL (perfil `prod`). |
 | RNF-05 | Usabilidad | Could | Las pantallas de iniciar labor y consultar alertas se usan sin scroll horizontal en un ancho de 360 px. |
 | RNF-06 | Observabilidad | Could | El backend expone *health check* y métricas (Spring Boot Actuator) y registra logs estructurados con un identificador de petición (ver doc 09). |
 
 *   **RNF-01 Seguridad y Auditoría:** Las contraseñas deben almacenarse encriptadas (ej. BCrypt). Toda acción que modifique el estado del sistema (compras, labores, mantenimientos) debe auditarse registrando el ID del usuario responsable.
-*   **RNF-02 Rendimiento:** El tiempo de respuesta para las consultas al tablero financiero no debe superar los 2 segundos, utilizando campos desnormalizados persistidos para optimizar los cálculos.
-*   **RNF-03 Disponibilidad:** El sistema web debe estar disponible 24/7, con un diseño que contemple tolerancia a fallos en la conexión a la API climática (ver doc 07, sección 7.3).
+*   **RNF-02 Rendimiento:** El tiempo de respuesta para las consultas al tablero financiero no debe superar los 2 segundos, utilizando campos desnormalizados persistidos y carga masiva sin consultas N+1 para optimizar los cálculos.
+*   **RNF-03 Disponibilidad y Respaldo:** El sistema web debe mantener una disponibilidad mensual $\ge 99{,}0\%$ medida sobre `/actuator/health` (ver cálculo formal en doc 09, sección 9.6), contemplando tolerancia a fallos en la conexión a la API climática (ver doc 07, sección 7.3) y una política de backups automatizados y recuperación ante desastres (ver doc 09, sección 9.7).
 *   **RNF-04 Compatibilidad Tecnológica:** El sistema debe soportar bases de datos PostgreSQL para entornos de producción (soportando proyecciones GIS futuras) y H2 en memoria para desarrollo, abstrayendo temporalmente los datos geográficos a formato WKT.
 *   **RNF-05 Usabilidad:** La interfaz debe ser responsive (adaptable a dispositivos móviles) dado que los agrónomos operarán ocasionalmente desde el campo.
 *   **RNF-06 Observabilidad:** El sistema debe permitir conocer su estado de salud y detectar fallas (por ejemplo, de la API climática) sin necesidad de revisar la base de datos manualmente.
