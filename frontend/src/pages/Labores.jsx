@@ -4,6 +4,7 @@ import CompletarLaborModal from '../components/labores/CompletarLaborModal.jsx'
 import DetalleLaborModal from '../components/labores/DetalleLaborModal.jsx'
 import LaborFormModal from '../components/labores/LaborFormModal.jsx'
 import ReprogramarLaborModal from '../components/labores/ReprogramarLaborModal.jsx'
+import ValidarClimaLaborModal from '../components/labores/ValidarClimaLaborModal.jsx'
 import { getSession, tieneAlgunRol } from '../services/api.js'
 import { listarInsumos } from '../services/insumosService.js'
 import {
@@ -53,6 +54,14 @@ function admiteIniciarEjecucion(labor) {
   return labor.estado === 'PLANIFICADA' && !labor.requiereValidacionClimatica
 }
 
+// HU-10 / doc 06 §6.3.2: se valida desde PLANIFICADA o BLOQUEADA_CLIMA (revalidación).
+function admiteValidarClima(labor) {
+  return (
+    labor.requiereValidacionClimatica &&
+    (labor.estado === 'PLANIFICADA' || labor.estado === 'BLOQUEADA_CLIMA')
+  )
+}
+
 // RN-08 / doc 06 §6.3.2: sólo una labor EN_EJECUCION puede pasar a COMPLETADA.
 function admiteCompletarLabor(estado) {
   return estado === 'EN_EJECUCION'
@@ -81,6 +90,7 @@ function Labores() {
   const [laborReprogramar, setLaborReprogramar] = useState(null)
   const [laborACompletar, setLaborACompletar] = useState(null)
   const [laborAIniciar, setLaborAIniciar] = useState(null)
+  const [laborValidarClima, setLaborValidarClima] = useState(null)
   const [iniciando, setIniciando] = useState(false)
   const [errorInicio, setErrorInicio] = useState('')
   const [laborACancelar, setLaborACancelar] = useState(null)
@@ -513,6 +523,18 @@ function Labores() {
                         >
                           Detalle
                         </button>
+                        {puedeEjecutar && admiteValidarClima(labor) && (
+                          <button
+                            type="button"
+                            className="btn btn--primario btn--chico"
+                            onClick={() => {
+                              setMensajeExito('')
+                              setLaborValidarClima(labor)
+                            }}
+                          >
+                            Validar clima
+                          </button>
+                        )}
                         {puedeEjecutar && puedeIniciarEsta && (
                           <button
                             type="button"
@@ -614,6 +636,16 @@ function Labores() {
             setLaborReprogramar(null)
             setMensajeExito(mensaje)
             await recargarTodo()
+          }}
+        />
+      )}
+
+      {laborValidarClima && (
+        <ValidarClimaLaborModal
+          labor={laborValidarClima}
+          onCerrar={async (cambioEstado) => {
+            setLaborValidarClima(null)
+            if (cambioEstado) await recargarTodo()
           }}
         />
       )}

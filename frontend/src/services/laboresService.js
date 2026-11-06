@@ -52,3 +52,18 @@ export function completarLabor(id, payload = {}) {
     body: JSON.stringify(payload),
   })
 }
+
+// HU-10: valida el clima actual del lote contra la regla del tipo de labor (CU-04, RN-01).
+export function validarClimaLabor(id) {
+  return apiFetch(`/labores/${id}/validar-clima`, {
+    method: 'POST',
+  })
+}
+
+// RN-11: aprobación manual cuando el servicio climático no responde y no hay caché.
+export function autorizarLaborManualmente(id, justificacion) {
+  return apiFetch(`/labores/${id}/autorizacion-manual`, {
+    method: 'POST',
+    body: JSON.stringify({ justificacion }),
+  })
+}
