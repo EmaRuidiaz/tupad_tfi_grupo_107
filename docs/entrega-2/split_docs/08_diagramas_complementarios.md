@@ -84,7 +84,7 @@ flowchart LR
 
 ## 8.3. Diagrama de Secuencia (Validación Climática)
 
-Este diagrama ilustra el flujo de comunicación dinámico entre los componentes del sistema (Frontend, Backend, Base de Datos y Servicios Externos) durante la ejecución del Caso de Uso CU-04. Demuestra cómo se aplican las reglas de negocio en tiempo real.
+Este diagrama ilustra el flujo de comunicación dinámico entre los componentes del sistema (Frontend, Backend, Base de Datos y Servicios Externos) durante la ejecución del Caso de Uso CU-04. Demuestra cómo se aplican las reglas de negocio y el bloqueo pesimista de stock (RN-13) en tiempo real.
 
 ```mermaid
 sequenceDiagram
@@ -108,6 +108,7 @@ sequenceDiagram
     DB-->>API: Umbrales climáticos máximos/mínimos
     
     alt Clima Óptimo (Regla Cumplida)
+        API->>DB: SELECT insumo FOR UPDATE (ordenado por insumo_id ASC)
         API->>DB: UPDATE labor_agricola (estado='APROBADA_CLIMA', datos climáticos)
         API->>DB: UPDATE insumo (stock_actual, stock_reservado) y labor_insumo (CONSUMIDO)
         API->>DB: Insertar movimiento_stock (EGRESO_LABOR)
@@ -123,7 +124,7 @@ sequenceDiagram
 
 ## 8.4. Diagramas de Estado
 
-Representan gráficamente las transiciones formalizadas en [06_reglas_negocio_casos_uso.md](./06_reglas_negocio_casos_uso.md#63-estados-de-negocio-y-transiciones) (RN-08).
+Representan gráficamente las transiciones formalizadas en [06_reglas_negocio_casos_uso.md](./06_reglas_negocio_casos_uso.md#63-estados-de-negocio-y-transiciones) (RN-08, RN-12).
 
 ### 8.4.1. Lote
 
@@ -189,7 +190,7 @@ stateDiagram-v2
 
 ## 8.5. Diagrama de Clases del Dominio
 
-Modelo de clases de las entidades JPA y sus principales responsabilidades. Los métodos de transición encapsulan las reglas de la sección 6.3, de modo que un estado inválido no pueda asignarse desde fuera de la entidad.
+Modelo de clases de las entidades JPA y sus principales responsabilidades. Los métodos de transición encapsulan las reglas de la sección 6.3, de modo que un estado inválido no pueda asignarse desde fuera de la entidad. Todas las asociaciones utilizan multiplicidades explícitas y no ambiguas (`1`, `0..1`, `0..*`, `1..*`) en ambos extremos.
 
 ```mermaid
 classDiagram
@@ -316,25 +317,52 @@ classDiagram
         String observacion
     }
 
-    Lote "1" --> "*" LaborAgricola
-    Lote "1" --> "*" RegistroCosecha
-    LaborAgricola "*" --> "0..1" Maquinaria
-    Maquinaria "1" --> "*" RegistroMantenimiento
-    LaborAgricola "1" *-- "*" LaborInsumo
-    LaborInsumo "*" --> "1" Insumo
-    LaborAgricola ..> ReglaClimatica : valida con
-    RegistroCosecha "*" --> "1" Cultivo
-    RegistroCosecha "0..1" --> "0..1" LaborAgricola
-    Proveedor "1" --> "*" CompraInsumo
-    CompraInsumo "1" *-- "*" DetalleCompra
-    DetalleCompra "*" --> "1" Insumo
-    MovimientoStock "*" --> "1" Insumo
-    MovimientoStock "*" --> "0..1" LaborAgricola
-    MovimientoStock "*" --> "0..1" CompraInsumo
-    LaborAgricola "*" --> "0..1" Usuario : responsable
-    MovimientoStock "*" --> "1" Usuario : responsable
-    CompraInsumo "*" --> "1" Usuario : responsable
+    Lote "1" --> "0..*" LaborAgricola : registra
+    Lote "1" --> "0..*" RegistroCosecha : cierra ciclo con
+    LaborAgricola "0..*" --> "0..1" Maquinaria : utiliza
+    Maquinaria "1" --> "0..*" RegistroMantenimiento : recibe
+    LaborAgricola "1" *-- "0..*" LaborInsumo : detalla
+    LaborInsumo "0..*" --> "1" Insumo : consume/reserva
+    LaborAgricola "0..*" ..> "0..1" ReglaClimatica : valida con
+    RegistroCosecha "0..*" --> "1" Cultivo : cosecha
+    RegistroCosecha "0..1" --> "0..1" LaborAgricola : originado por
+    Proveedor "1" --> "0..*" CompraInsumo : abastece
+    CompraInsumo "1" *-- "1..*" DetalleCompra : contiene
+    DetalleCompra "0..*" --> "1" Insumo : ingresa
+    MovimientoStock "0..*" --> "1" Insumo : afecta
+    MovimientoStock "0..*" --> "0..1" LaborAgricola : originado en
+    MovimientoStock "0..*" --> "0..1" CompraInsumo : originado en
+    Lote "0..*" --> "0..1" Usuario : responsable
+    LaborAgricola "0..*" --> "0..1" Usuario : responsable
+    RegistroMantenimiento "0..*" --> "0..1" Usuario : registrado por
+    RegistroCosecha "0..*" --> "0..1" Usuario : registrado por
+    MovimientoStock "0..*" --> "1" Usuario : auditado por
+    CompraInsumo "0..*" --> "1" Usuario : registrada por
 ```
+
+### 8.5.1. Especificación Formal de Multiplicidades del Modelo de Dominio
+
+Para eliminar cualquier ambigüedad sobre las cardinalidades del diagrama de clases (sección 8.5) y su correspondencia exacta con el DER (documento 02), la siguiente tabla explicita los límites inferior y superior (`1`, `0..1`, `0..*`, `1..*`) de cada extremo de asociación:
+
+| Entidad Origen | Multiplicidad Origen | Entidad Destino | Multiplicidad Destino | Justificación de Dominio y Restricción |
+| :--- | :---: | :--- | :---: | :--- |
+| `Lote` | `1` | `LaborAgricola` | `0..*` | Toda labor agrícola se ejecuta sobre un único lote (`lote_id NOT NULL`). Un lote recién dado de alta puede no tener labores aún (`0..*`). |
+| `Lote` | `1` | `RegistroCosecha` | `0..*` | Cada cosecha pertenece a un lote (`lote_id NOT NULL`). Un lote puede no haber sido cosechado nunca (`0`) o acumular múltiples cosechas históricas a lo largo de sucesivos ciclos productivos (`0..*`, RN-12). |
+| `Cultivo` | `1` | `RegistroCosecha` | `0..*` | Cada registro de cosecha especifica un único cultivo cosechado (`cultivo_id NOT NULL`). Un cultivo del catálogo puede estar aún sin cosechas registradas (`0..*`). |
+| `LaborAgricola` | `0..1` | `RegistroCosecha` | `0..1` | Un registro de cosecha puede vincularse opcionalmente a la labor de tipo `COSECHA` que lo originó (`labor_cosecha_id NULL UNIQUE`). La mayoría de las labores no son de cosecha (`0..1`). |
+| `Maquinaria` | `0..1` | `LaborAgricola` | `0..*` | Una labor puede realizarse de forma manual o con servicios tercerizados sin maquinaria propia (`0..1`). Una máquina puede emplearse en cero o muchas labores a lo largo de su vida útil (`0..*`). |
+| `Maquinaria` | `1` | `RegistroMantenimiento` | `0..*` | Todo service pertenece a una máquina específica (`maquinaria_id NOT NULL`). Una máquina recién incorporada no posee mantenimientos (`0..*`). |
+| `LaborAgricola` | `1` | `LaborInsumo` | `0..*` | Composición: cada ítem de insumo pertenece a una labor (`labor_id NOT NULL`). Ciertas labores mecánicas (ej. `LABRANZA`) no consumen insumos del pañol (`0..*`). |
+| `Insumo` | `1` | `LaborInsumo` | `0..*` | Cada línea de reserva/consumo referencia un único insumo (`insumo_id NOT NULL`). Un insumo puede no haberse utilizado aún en ninguna labor (`0..*`). |
+| `LaborAgricola` | `0..*` | `ReglaClimatica` | `0..1` | Dependencia de validación por `tipo_labor`: las labores con restricción meteorológica (`SIEMBRA`, `PULVERIZACION`, `FERTILIZACION`, `COSECHA`) consultan su única regla activa (`1`), mientras que `LABRANZA` u `OTRA` pueden no tener regla asociada (`0..1`). |
+| `Proveedor` | `1` | `CompraInsumo` | `0..*` | Toda orden de compra se emite a un proveedor (`proveedor_id NOT NULL`). Un proveedor agendado puede no registrar compras todavía (`0..*`). |
+| `CompraInsumo` | `1` | `DetalleCompra` | `1..*` | Composición: toda compra registrada debe contener al menos un renglón de detalle (`1..*`, validado en CU-02) y cada renglón pertenece exclusivamente a una compra (`1`). |
+| `Insumo` | `1` | `DetalleCompra` | `0..*` | Cada renglón de compra corresponde a un insumo (`insumo_id NOT NULL`). Un insumo dado de alta puede no tener compras registradas aún (`0..*`). |
+| `Insumo` | `1` | `MovimientoStock` | `0..*` | Todo movimiento de kardex afecta a un único insumo (`insumo_id NOT NULL`). Un insumo recién creado sin stock inicial puede no tener movimientos (`0..*`). |
+| `LaborAgricola` | `0..1` | `MovimientoStock` | `0..*` | Los movimientos de tipo `EGRESO_LABOR` referencian la labor que consumió los insumos (`0..1`); una labor puede generar movimientos para varios insumos (`0..*`). Los movimientos de compra o ajuste no referencian labor (`0`). |
+| `CompraInsumo` | `0..1` | `MovimientoStock` | `0..*` | Los movimientos de tipo `INGRESO_COMPRA` referencian la compra que dio ingreso al stock (`0..1`); una compra con múltiples líneas genera varios movimientos (`0..*`). |
+| `Usuario` | `1` | `MovimientoStock` / `CompraInsumo` | `0..*` | Auditoría obligatoria (`usuario_id NOT NULL`, RN-04): todo movimiento de stock y toda compra requiere un usuario autenticado responsable (`1`). Un usuario puede registrar cero o muchas operaciones (`0..*`). |
+| `Usuario` | `0..1` | `Lote` / `LaborAgricola` / `RegistroMantenimiento` / `RegistroCosecha` | `0..*` | Auditoría y asignación operativa (`ON DELETE SET NULL`): cada registro puede estar asociado a un responsable (`0..1`), preservando el historial operativo si el usuario se desvincula. |
 
 ## 8.6. Diagrama de Secuencia (Contingencia ante caída de la API Climática)
 
@@ -381,7 +409,7 @@ sequenceDiagram
 
 ## 8.7. Diagrama de Secuencia (Registrar Compra de Insumos)
 
-Flujo del CU-02. Toda la operación se ejecuta en una única transacción: si falla una línea, no se persiste ninguna.
+Flujo del CU-02 y control de concurrencia RN-13. Toda la operación se ejecuta en una única transacción con bloqueo pesimista ordenado por `insumo_id ASC`: si falla una línea, no se persiste ninguna.
 
 ```mermaid
 sequenceDiagram
@@ -392,22 +420,23 @@ sequenceDiagram
 
     Adm->>UI: Carga proveedor, insumos, cantidades y precios
     UI->>SRV: POST /api/compras (JWT con rol ADMIN)
-    SRV->>SRV: Valida cantidades > 0 y calcula subtotales y total
-    SRV->>DB: BEGIN TRANSACTION
+    SRV->>SRV: Valida cantidades > 0, ordena ítems por insumo_id ASC y calcula subtotales
+    SRV->>DB: BEGIN TRANSACTION (READ_COMMITTED)
     SRV->>DB: INSERT compra_insumo (total_compra, usuario_id)
-    loop Por cada línea
+    loop Por cada línea (ordenada por insumo_id ASC)
+        SRV->>DB: SELECT * FROM insumo WHERE id = ? FOR UPDATE
         SRV->>DB: INSERT detalle_compra (subtotal)
-        SRV->>DB: UPDATE insumo (stock_actual += cantidad, precio_unitario)
+        SRV->>DB: UPDATE insumo (stock_actual += cantidad, precio_unitario = PPP)
         SRV->>DB: INSERT movimiento_stock (INGRESO_COMPRA, compra_id)
     end
-    SRV->>DB: COMMIT
+    SRV->>DB: COMMIT (libera locks)
     SRV-->>UI: 201 Created
     UI-->>Adm: Compra registrada y stock actualizado
 ```
 
 ## 8.8. Diagrama de Actividad (Programar Labor con Reserva de Stock)
 
-Flujo del CU-03 y de la regla RN-07.
+Flujo del CU-03 y de las reglas RN-07 y RN-13 (bloqueo pesimista de insumos para evitar sobre-asignación concurrente).
 
 ```mermaid
 flowchart TD
@@ -416,13 +445,14 @@ flowchart TD
     C -- No --> X1[Rechazar: estado del lote no permite la labor] --> Z([Fin])
     C -- Sí --> D{¿Maquinaria OPERATIVO?}
     D -- No --> X2[Rechazar: maquinaria no disponible] --> Z
-    D -- Sí --> E[Calcular stock disponible = stock_actual - stock_reservado]
-    E --> F{¿Disponible >= requerido para todos los insumos?}
-    F -- No --> X3[Rechazar indicando cantidad faltante] --> Z
+    D -- Sí --> E["Ordenar insumos por insumo_id ASC y adquirir lock (SELECT ... FOR UPDATE)"]
+    E --> E2[Calcular stock disponible = stock_actual - stock_reservado]
+    E2 --> F{¿Disponible >= requerido para todos los insumos?}
+    F -- No --> X3["Rollback (libera locks) y rechazar indicando cantidad faltante"] --> Z
     F -- Sí --> G[Crear labor en PLANIFICADA]
     G --> H[Crear labor_insumo en RESERVADO]
     H --> I[Incrementar insumo.stock_reservado]
-    I --> J[Confirmar transacción]
+    I --> J["Confirmar transacción (COMMIT y libera locks)"]
     J --> Z
 ```
 

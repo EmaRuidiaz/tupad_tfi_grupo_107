@@ -32,12 +32,12 @@ Catálogo de proveedores de insumos.
 | `email` | `VARCHAR(100)` | SÍ | Correo de contacto comercial. |
 
 ### 3.3. Tabla `cultivo`
-Catálogo de cultivos. Se separa de `registro_cosecha` para evitar errores de tipeo y redundancia.
+Catálogo de cultivos. Se separa de `registro_cosecha` para evitar errores de tipeo y redundancia, permitiendo además distinguir cultivos de primera y de segunda dentro de una misma especie (ej. `"Soja 1°"`, `"Soja 2°"`).
 
 | Columna | Tipo de Dato | Nulo | Descripción / Restricciones |
 | :--- | :--- | :--- | :--- |
 | `id` | `BIGINT` | NO | PK. |
-| `nombre` | `VARCHAR(60)` | NO | `UNIQUE`. Nombre comercial/campaña (ej. "Soja 1°", "Soja 2°", "Maíz Tardío"). |
+| `nombre` | `VARCHAR(60)` | NO | `UNIQUE`. Nombre comercial/modalidad de campaña (ej. "Soja 1°", "Soja 2°", "Maíz Tardío"). |
 | `especie` | `VARCHAR(60)` | NO | Especie botánica agrupadora (ej. "Soja", "Maíz", "Trigo"). |
 
 ### 3.4. Tabla `lote`
@@ -153,21 +153,21 @@ Tabla intermedia (N:M) entre labores e insumos. Registra la reserva y el consumo
 *Restricción adicional:* `UNIQUE (labor_id, insumo_id)` — un insumo aparece una sola vez por labor.
 
 ### 3.11. Tabla `registro_cosecha`
-Resultado productivo y económico de la cosecha de un lote.
+Resultado productivo y económico consolidado del cierre de un ciclo productivo (campaña) de un lote. Un mismo `lote` puede registrar múltiples filas en esta tabla a lo largo de sucesivas campañas (`1:0..*`), correspondiendo cada fila al cierre completo de un ciclo productivo (ver [02_modelo_der.md](./02_modelo_der.md#22-formalización-de-campaña-agrícola--ciclo-productivo-y-política-de-cosechas) y `RN-12`).
 
 | Columna | Tipo de Dato | Nulo | Descripción / Restricciones |
 | :--- | :--- | :--- | :--- |
 | `id` | `BIGINT` | NO | PK. |
-| `lote_id` | `BIGINT` | NO | FK a `lote` (`ON DELETE RESTRICT`). |
-| `labor_id` | `BIGINT` | SÍ | `UNIQUE`. FK a `labor_agricola` de tipo `COSECHA` (`ON DELETE SET NULL`). |
-| `cultivo_id` | `BIGINT` | NO | FK a `cultivo` (`ON DELETE RESTRICT`). |
+| `lote_id` | `BIGINT` | NO | FK a `lote` (`ON DELETE RESTRICT`). Indexada (`idx_cosecha_lote`). Permite múltiples campañas históricas por lote. |
+| `labor_id` | `BIGINT` | SÍ | `UNIQUE`. FK a `labor_agricola` de tipo `COSECHA` (`ON DELETE SET NULL`). Vincula `0..1` orden de trilla con su cosecha. |
+| `cultivo_id` | `BIGINT` | NO | FK a `cultivo` (`ON DELETE RESTRICT`). Cultivo recolectado en el ciclo cerrado. |
 | `usuario_id` | `BIGINT` | SÍ | FK a `usuario` (`ON DELETE SET NULL`). Usuario que declaró la cosecha. |
-| `fecha_cosecha` | `DATE` | NO | Fecha de la cosecha. |
-| `toneladas_totales` | `DECIMAL(10, 2)` | NO | `CHECK (toneladas_totales >= 0)`. Producción total. |
+| `fecha_cosecha` | `DATE` | NO | Fecha de cierre de la cosecha del ciclo productivo. Delimita el fin del ciclo actual y el inicio de la ventana de costos del ciclo siguiente. |
+| `toneladas_totales` | `DECIMAL(10, 2)` | NO | `CHECK (toneladas_totales >= 0)`. Producción total consolidada del ciclo en el lote. |
 | `rinde_ton_por_ha` | `DECIMAL(8, 2)` | NO | `CHECK (rinde_ton_por_ha >= 0)`. **Calculado**. |
-| `precio_venta_por_ton` | `DECIMAL(12, 2)` | NO | `CHECK (precio_venta_por_ton >= 0)`. Precio de venta pactado. |
+| `precio_venta_por_ton` | `DECIMAL(12, 2)` | NO | `CHECK (precio_venta_por_ton >= 0)`. Precio de venta pactado por tonelada. |
 | `ingreso_bruto_total` | `DECIMAL(14, 2)` | NO | **Calculado**. |
-| `margen_neto_calculado` | `DECIMAL(14, 2)` | NO | Default `0`. **Calculado**. Puede ser negativo (pérdida). |
+| `margen_neto_calculado` | `DECIMAL(14, 2)` | NO | Default `0`. **Calculado**. Resultado neto histórico del ciclo productivo; puede ser negativo (pérdida). |
 
 ### 3.12. Tabla `compra_insumo`
 Cabecera de la compra (factura) a un proveedor.
@@ -228,6 +228,8 @@ Los campos derivados se persisten por performance (RNF-02) e inmutabilidad hist�
 | `maquinaria.horas_para_proximo_service` | `registro_mantenimiento.proximo_service_horas` del último service | Al registrar un mantenimiento (CU-06). | Sí, con cada service. |
 | `registro_cosecha.rinde_ton_por_ha` | `toneladas_totales / lote.superficie_ha` | Al registrar la cosecha (CU-05). | No. |
 | `registro_cosecha.ingreso_bruto_total` | `toneladas_totales * precio_venta_por_ton` | Al registrar la cosecha (CU-05). | No. |
-| `registro_cosecha.margen_neto_calculado` | `ingreso_bruto_total - SUM(costo_total_calculado)` de las labores `COMPLETADA` del lote en la campaña | Al registrar la cosecha (CU-05). | No. |
+| `registro_cosecha.margen_neto_calculado` | `ingreso_bruto_total - SUM(costo_total_calculado)` de las labores `COMPLETADA` del lote ejecutadas dentro del ciclo productivo actual (`fecha_cosecha_anterior < fecha_ejecucion <= fecha_cosecha`, RN-12) | Al registrar la cosecha (CU-05). | No (RN-05). |
 
-**Control de consistencia:** un proceso programado diario (ver doc 09) compara `stock_actual` contra la suma de `movimiento_stock` y `stock_reservado` contra la suma de reservas activas. Si detecta diferencias, genera una alerta para el `ADMIN` en lugar de corregir automáticamente.
+**Control de concurrencia y consistencia:**
+* **En tiempo real (transaccional):** toda lectura previa a una modificación de `stock_actual` o `stock_reservado` utiliza bloqueo pesimista `SELECT ... FOR UPDATE` (`@Lock(LockModeType.PESSIMISTIC_WRITE)`) dentro de una transacción `@Transactional`, ordenando los bloqueos por `insumo.id ASC` cuando intervienen múltiples insumos para prevenir *deadlocks* (ver doc 07, sección 7.4).
+* **Control periódico de auditoría:** un proceso programado diario (ver doc 09) compara `stock_actual` contra la suma de `movimiento_stock` y `stock_reservado` contra la suma de reservas activas. Si detecta diferencias, genera una alerta para el `ADMIN` en lugar de corregir automáticamente.

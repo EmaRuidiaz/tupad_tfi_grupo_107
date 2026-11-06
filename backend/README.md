@@ -260,6 +260,32 @@ Las variables y unidades coinciden con las de la evaluación de reglas climátic
 | Lote inexistente | `404` |
 | API climática caída y sin lectura en caché vigente | `503` |
 
+## Tablero financiero — Margen Neto y ROI por lote (HU-13)
+
+| Método | Endpoint | Roles | Descripción |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/tablero-financiero` | `ADMIN`, `AGRONOMO` | Resumen financiero consolidado de campaña (KPIs globales) más el reporte detallado por cada lote. Admite `?estadoLote=`, `?soloConCosecha=true`, `?fechaDesde=YYYY-MM-DD`, `?fechaHasta=YYYY-MM-DD` y `?alcanceCiclo=HISTORICO\|ULTIMO_CICLO` |
+| `GET` | `/api/tablero-financiero/lotes` | `ADMIN`, `AGRONOMO` | Lista de reportes financieros por lote (admite `?estadoLote=`, `?soloConCosecha=true`, `?fechaDesde=`, `?fechaHasta=` y `?alcanceCiclo=`) |
+| `GET` | `/api/tablero-financiero/lotes/{loteId}` | `ADMIN`, `AGRONOMO` | Reporte financiero de un lote específico con el desglose de sus labores `COMPLETADA` y sus registros de cosecha (admite `?fechaDesde=`, `?fechaHasta=` y `?alcanceCiclo=`) |
+
+**Reglas y fórmulas que aplica el backend (Módulo 9, RF-08, RN-05, RN-12, RNF-02):**
+* `costosTotalesAcumulados` suma los `costo_total_calculado` históricos e inmutables (RN-05) de las labores en estado `COMPLETADA` del lote dentro del alcance consultado, desglosando `costoInsumosAcumulado` y `costoMaquinariaAcumulado`, y calcula `costoPorHa = costosTotalesAcumulados / superficieHa`. Las órdenes pendientes o en ejecución no suman al costo consolidado hasta completarse.
+* **Delimitación por ciclo productivo (`RN-12`):**
+  * Con `alcanceCiclo=HISTORICO` (valor por defecto), se consolidan todas las labores completadas y cosechas registradas del lote (acotadas opcionalmente por `fechaDesde` / `fechaHasta`).
+  * Con `alcanceCiclo=ULTIMO_CICLO`, el cálculo se acota a la ventana temporal `(fecha_cosecha_anterior, fecha_ultima_cosecha]` del último ciclo productivo cerrado (o a la campaña activa posterior si el lote ya reingresó a preparación/siembra tras su última cosecha).
+* Si el lote registra cosechas en el período (`cosechaRegistrada = true`), se consolidan `toneladasTotales`, `rindeTonPorHa = toneladasTotales / superficieHa`, `ingresoBrutoTotal = SUM(ingreso_bruto_total)` y `margenNeto = ingresoBrutoTotal - costosTotalesAcumulados`.
+* Cálculo de ROI (RF-08):
+  * Con cosecha registrada y `costosTotalesAcumulados > 0` (criterio 1): `roiPct = (margenNeto / costosTotalesAcumulados) * 100` (`estadoRoi = "CALCULADO"`).
+  * Sin cosecha registrada y `costosTotalesAcumulados > 0` (criterio 2): se exponen únicamente los costos acumulados y el ROI queda en `estadoRoi = "PENDIENTE"` (`roiPct = null`, `ingresoBrutoTotal = null`, `margenNeto = null`).
+  * Con `costosTotalesAcumulados == 0` (criterio 3): se evita la división por cero y se informa `estadoRoi = "SIN_COSTOS"` (`"Sin costos registrados"` / `"Pendiente (sin costos registrados)"`).
+* Carga masiva sin consultas N+1 para cumplir el tiempo de respuesta `< 2 s` con hasta 500 lotes (RNF-02).
+
+| Situación | Respuesta |
+| :--- | :--- |
+| Rango de fechas inválido (`fechaDesde > fechaHasta`) | `400` |
+| Consulta por un usuario con rol `OPERARIO` (doc 07 §7.2) | `403` |
+| Lote inexistente en `/api/tablero-financiero/lotes/{loteId}` | `404` |
+
 ## Configuración útil
 
 | Variable | Default | Uso |

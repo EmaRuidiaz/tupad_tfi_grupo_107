@@ -8,13 +8,15 @@ Las siguientes reglas dictan las restricciones lógicas y comerciales operativas
 *   **RN-02 Restricción de Cosecha:** Un lote no puede registrar una cosecha a menos que su estado agronómico actual sea `LISTO_COSECHA`. Al registrarla, el lote pasa a `COSECHADO`.
 *   **RN-03 Consistencia de Inventario:** No es posible programar una labor si el **stock disponible** (`stock_actual - stock_reservado`) de alguno de los insumos requeridos es menor a la cantidad demandada. Al iniciarla, se verifica además que el `stock_actual` físico siga alcanzando.
 *   **RN-04 Trazabilidad de Responsabilidad:** Absolutamente todas las labores ejecutadas, mantenimientos realizados, cosechas y movimientos de stock (compras o ajustes) deben quedar vinculados de forma inmutable al `usuario_id` que los autorizó.
-*   **RN-05 Costeo Inmutable:** Una vez que una labor finaliza y se calcula su `costo_total_calculado`, este valor se vuelve histórico y no debe recalcularse retrospectivamente aunque el precio unitario del insumo cambie en el futuro.
+*   **RN-05 Costeo Inmutable:** Una vez que una labor finaliza y se calcula su `costo_total_calculado`, este valor se vuelve histórico y no debe recalcularse retrospectivamente aunque el precio unitario del insumo o el costo horario de la maquinaria cambie en el futuro.
 *   **RN-06 Mantenimiento Obligatorio:** Si las horas de uso de una maquinaria superan las `horas_para_proximo_service`, la maquinaria generará una alerta de mantenimiento crítico, debiendo registrarse un servicio para reiniciar el contador.
 *   **RN-07 Reserva de Stock:** Al programar una labor, las cantidades de insumos quedan reservadas (`estado_reserva = 'RESERVADO'`) y se suman a `insumo.stock_reservado`. La reserva se convierte en consumo al iniciar la labor o se libera al cancelarla.
 *   **RN-08 Transiciones de Estado Controladas:** Los estados de `lote`, `labor_agricola`, `maquinaria` y `labor_insumo` sólo pueden cambiar según las transiciones definidas en la sección 6.3. Cualquier otra transición es rechazada por la capa de servicio.
 *   **RN-09 Inmutabilidad del Historial de Stock:** Los registros de `movimiento_stock` no se modifican ni se eliminan. Las correcciones se realizan con un nuevo movimiento de tipo `AJUSTE` con observación obligatoria.
 *   **RN-10 Disponibilidad de Maquinaria:** Sólo puede asignarse a una labor una maquinaria en estado `OPERATIVO`. Mientras la labor está `EN_EJECUCION`, la máquina permanece `EN_LABOR` y no puede asignarse a otra labor en ejecución.
 *   **RN-11 Autorización Manual por Contingencia Climática:** Si la API climática no está disponible y no hay datos en caché vigentes, sólo un usuario `AGRONOMO` o `ADMIN` puede autorizar manualmente el inicio de la labor, registrando una justificación en `observaciones_climaticas`.
+*   **RN-12 Delimitación de Ciclo Productivo (Campaña) y Política de Cosechas:** Cada `registro_cosecha` representa el cierre consolidado de un ciclo productivo del lote (no se registran cosechas parciales abiertas sobre el mismo ciclo). Un lote puede registrar múltiples cosechas históricas a lo largo de campañas consecutivas (`1:0..*`), una vez que transiciona de `COSECHADO` a `EN_PREPARACION` para iniciar una nueva campaña. Los costos imputados a una cosecha comprenden las labores `COMPLETADA` del lote ejecutadas entre la `fecha_cosecha` inmediata anterior y la `fecha_cosecha` actual (ver doc 02, sección 2.2).
+*   **RN-13 Control de Concurrencia en Operaciones de Stock:** Toda operación que verifique o modifique `stock_actual` o `stock_reservado` (programación, edición, inicio o cancelación de labores, compras y ajustes manuales) debe ejecutarse en una transacción atómica adquiriendo bloqueo pesimista (`SELECT ... FOR UPDATE`) sobre los insumos involucrados, ordenados por `insumo_id ASC` para impedir condiciones de carrera (*race conditions*) e interbloqueos (*deadlocks*) (ver doc 07, sección 7.4).
 
 ## 6.2. Casos de Uso (CU) Principales
 
@@ -27,18 +29,18 @@ A continuación se listan los Casos de Uso más representativos del sistema:
 
 ### CU-02: Registrar Compra de Insumos
 *   **Actor:** Admin.
-*   **Descripción:** El actor registra una factura de un proveedor, especificando los insumos, cantidades y precios. El sistema calcula subtotales y total, actualiza el `stock_actual` y el `precio_unitario` de cada insumo y crea registros en `movimiento_stock` con tipo `INGRESO_COMPRA`. Toda la operación es atómica.
+*   **Descripción:** El actor registra una factura de un proveedor, especificando al menos un detalle de insumo con cantidad mayor a 0 y precio unitario. El sistema bloquea los insumos (`FOR UPDATE`), calcula subtotales y total, actualiza el `stock_actual` y el `precio_unitario` de cada insumo y crea registros en `movimiento_stock` con tipo `INGRESO_COMPRA`. Toda la operación es atómica.
 
 ### CU-03: Programar Labor Agrícola
 *   **Actor:** Agrónomo.
-*   **Precondiciones:** El lote existe y no está `COSECHADO` ni en `DESCANSO` (salvo labores de `LABRANZA`). La maquinaria elegida, si la hay, está `OPERATIVO`.
+*   **Precondiciones:** El lote existe y su estado agronómico es compatible con el `tipo_labor`. La maquinaria elegida, si la hay, está `OPERATIVO` y sin superposición horaria (±2 h).
 *   **Flujo Principal:**
     1. El actor selecciona el lote, el tipo de labor, la fecha planificada, la maquinaria y los insumos con sus cantidades.
-    2. El sistema calcula el stock disponible de cada insumo (`stock_actual - stock_reservado`).
+    2. El sistema ordena los insumos solicitados por `insumo_id ASC`, los bloquea con `SELECT ... FOR UPDATE` (RN-13) y calcula el stock disponible de cada uno (`stock_actual - stock_reservado`).
     3. El sistema crea la labor en estado `PLANIFICADA` y una línea `labor_insumo` por insumo en estado `RESERVADO`.
     4. El sistema incrementa `stock_reservado` de cada insumo (RN-07).
 *   **Flujos Alternativos:**
-    *   *2a. Stock insuficiente:* Si algún insumo no tiene stock disponible suficiente, el sistema rechaza la programación indicando la cantidad faltante y no reserva nada.
+    *   *2a. Stock insuficiente:* Si algún insumo no tiene stock disponible suficiente, el sistema rechaza la programación indicando la cantidad faltante (`409 Conflict`) y realiza *rollback* sin reservar nada.
 
 ### CU-04: Ejecutar Labor (Validación Climática)
 *   **Actor:** Operario / Agrónomo.
@@ -49,7 +51,7 @@ A continuación se listan los Casos de Uso más representativos del sistema:
     3. El sistema backend consulta la API Climática externa pasándole las coordenadas.
     4. El sistema evalúa las variables devueltas (viento, temperatura, humedad, probabilidad de lluvia) contra la tabla `regla_climatica` correspondiente al `tipo_labor`.
     5. Al ser óptimo el clima, el sistema guarda los datos climáticos y pasa la labor a `APROBADA_CLIMA`.
-    6. El sistema descuenta el inventario físico, pasa las reservas a `CONSUMIDO` y registra un `EGRESO_LABOR` en `movimiento_stock` por insumo.
+    6. El sistema adquiere bloqueo pesimista (`FOR UPDATE`) sobre los insumos reservados en orden de `insumo_id ASC` (RN-13), descuenta el inventario físico (`stock_actual` y `stock_reservado`), pasa las reservas a `CONSUMIDO` fijando su `costo_subtotal` histórico (RN-05) y registra un `EGRESO_LABOR` en `movimiento_stock` por insumo.
     7. El sistema cambia el estado de la labor a `EN_EJECUCION` (y la maquinaria a `EN_LABOR`), registrando `fecha_ejecucion`.
     8. El sistema muestra un mensaje de éxito al usuario.
 *   **Flujos Alternativos:**
@@ -61,7 +63,7 @@ A continuación se listan los Casos de Uso más representativos del sistema:
 ### CU-05: Registrar Cosecha y Consultar ROI
 *   **Actor:** Agrónomo / Admin.
 *   **Precondiciones:** El lote está en `LISTO_COSECHA` (RN-02).
-*   **Descripción:** Al finalizar el ciclo del cultivo, se registra el rendimiento en toneladas y el precio de venta. El sistema calcula rinde, ingreso bruto y margen neto usando los costos históricos de las labores (RN-05), pasa el lote a `COSECHADO` y presenta el ROI final del lote en el Tablero de Control.
+*   **Descripción:** Al finalizar el ciclo del cultivo en el lote, se registra en un único `registro_cosecha` consolidado el rendimiento en toneladas (`toneladas_totales`), el cultivo recolectado (`cultivo_id`) y el precio de venta (`precio_venta_por_ton`). El sistema calcula `rinde_ton_por_ha`, `ingreso_bruto_total` y `margen_neto_calculado` restando los costos históricos de las labores `COMPLETADA` ejecutadas en ese lote durante el ciclo productivo que se cierra (`RN-05`, `RN-12`), pasa el lote a `COSECHADO` y presenta el ROI final y el historial de campañas del lote en el Tablero Financiero.
 
 ### CU-06: Registrar Mantenimiento de Maquinaria
 *   **Actor:** Agrónomo / Operario.
@@ -75,7 +77,7 @@ A continuación se listan los Casos de Uso más representativos del sistema:
 ### CU-08: Cancelar o Reprogramar Labor
 *   **Actor:** Agrónomo.
 *   **Precondiciones:** La labor está en `PLANIFICADA`, `APROBADA_CLIMA` o `BLOQUEADA_CLIMA`.
-*   **Descripción:** Para **reprogramar**, el actor indica una nueva `fecha_planificada` y la labor vuelve a `PLANIFICADA` conservando sus reservas. Para **cancelar**, la labor pasa a `CANCELADA`, sus líneas pasan a `LIBERADO` y se descuentan de `stock_reservado`.
+*   **Descripción:** Para **reprogramar**, el actor indica una nueva `fecha_planificada` y la labor vuelve a `PLANIFICADA` conservando sus reservas. Para **cancelar**, la labor pasa a `CANCELADA`, sus líneas pasan a `LIBERADO` y se descuentan de `stock_reservado` bajo bloqueo pesimista (RN-13).
 
 ### CU-09: Consultar y Resolver Alertas
 *   **Actor:** Admin / Agrónomo / Operario (cada rol ve las alertas que le corresponden).
@@ -89,12 +91,12 @@ Esta sección formaliza los estados definidos en los `CHECK` del modelo físico 
 
 | Estado | Significado |
 | :--- | :--- |
-| `EN_PREPARACION` | Lote en barbecho o labranza, previo a la siembra. Estado inicial. |
+| `EN_PREPARACION` | Lote en barbecho o labranza, previo a la siembra de un nuevo ciclo productivo. Estado inicial. |
 | `SEMBRADO` | Siembra completada; cultivo aún no emergido. |
 | `EN_CRECIMIENTO` | Cultivo emergido y en desarrollo. |
 | `LISTO_COSECHA` | Cultivo en madurez comercial, apto para cosechar. |
-| `COSECHADO` | Cosecha registrada; fin del ciclo productivo. |
-| `DESCANSO` | Lote sin actividad productiva planificada. |
+| `COSECHADO` | Cosecha consolidada registrada; cierre del ciclo productivo activo (RN-12). |
+| `DESCANSO` | Lote sin actividad productiva planificada entre campañas. |
 
 | Origen | Destino | Disparador | Quién |
 | :--- | :--- | :--- | :--- |
@@ -102,10 +104,10 @@ Esta sección formaliza los estados definidos en los `CHECK` del modelo físico 
 | `EN_PREPARACION` | `SEMBRADO` | Se completa una labor de tipo `SIEMBRA` en el lote. | Sistema (automático) |
 | `SEMBRADO` | `EN_CRECIMIENTO` | Se registra la emergencia del cultivo. | Agrónomo |
 | `EN_CRECIMIENTO` | `LISTO_COSECHA` | El agrónomo determina madurez comercial. | Agrónomo |
-| `LISTO_COSECHA` | `COSECHADO` | Se registra la cosecha (CU-05). | Sistema (automático) |
-| `COSECHADO` | `EN_PREPARACION` | Inicio de una nueva campaña. | Agrónomo |
+| `LISTO_COSECHA` | `COSECHADO` | Se registra la cosecha consolidada del ciclo (CU-05, RN-02, RN-12). | Sistema (automático) |
+| `COSECHADO` | `EN_PREPARACION` | Inicio de una nueva campaña / ciclo productivo en el lote (RN-12). | Agrónomo |
 | `COSECHADO` | `DESCANSO` | Se decide no sembrar en la próxima campaña. | Agrónomo |
-| `DESCANSO` | `EN_PREPARACION` | Se retoma la actividad productiva. | Agrónomo |
+| `DESCANSO` | `EN_PREPARACION` | Se retoma la actividad productiva para una nueva campaña. | Agrónomo |
 | `SEMBRADO` / `EN_CRECIMIENTO` | `EN_PREPARACION` | Pérdida total del cultivo (granizo, helada, inundación). Requiere observación. | Agrónomo |
 
 ### 6.3.2. Estados de la Labor (`labor_agricola.estado`)
@@ -121,7 +123,7 @@ Esta sección formaliza los estados definidos en los `CHECK` del modelo físico 
 
 | Origen | Destino | Disparador | Efectos |
 | :--- | :--- | :--- | :--- |
-| *(alta)* | `PLANIFICADA` | Programar labor (CU-03). | Reserva de insumos (RN-07). |
+| *(alta)* | `PLANIFICADA` | Programar labor (CU-03). | Reserva de insumos (RN-07, RN-13). |
 | `PLANIFICADA` / `BLOQUEADA_CLIMA` | `APROBADA_CLIMA` | Validación climática exitosa o autorización manual (CU-04). | Se guardan las variables climáticas. |
 | `PLANIFICADA` / `BLOQUEADA_CLIMA` | `BLOQUEADA_CLIMA` | Validación climática fallida (CU-04, 4a). | Alerta de clima adverso. |
 | `PLANIFICADA` | `EN_EJECUCION` | Inicio de labor sin regla climática (`LABRANZA`). | Consumo de stock; máquina `EN_LABOR`. |

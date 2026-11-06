@@ -27,6 +27,15 @@ function calcularTopeHorasDesdeInicio(fechaEjecucion) {
   return Math.max(1, dias) * HORAS_POR_DIA
 }
 
+function calcularHorasTranscurridasSugeridas(fechaEjecucion, topeHoras) {
+  if (!fechaEjecucion) return null
+  const inicio = new Date(fechaEjecucion)
+  if (Number.isNaN(inicio.getTime())) return null
+  const diffHoras = (Date.now() - inicio.getTime()) / (1000 * 60 * 60)
+  const acotadas = Math.min(topeHoras, Math.max(0.25, diffHoras))
+  return (Math.round(acotadas * 4) / 4).toFixed(2)
+}
+
 function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) {
   const tieneMaquinaria = Boolean(labor?.maquinariaId)
 
@@ -51,6 +60,12 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
   const topeHoras = useMemo(
     () => calcularTopeHorasDesdeInicio(labor?.fechaEjecucion),
     [labor],
+  )
+
+  const horasSugeridasDesdeInicio = useMemo(
+    () =>
+      calcularHorasTranscurridasSugeridas(labor?.fechaEjecucion, topeHoras),
+    [labor, topeHoras],
   )
 
   const costoHoraMaquina = tieneMaquinaria
@@ -126,8 +141,11 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
         observaciones: observaciones.trim() || null,
       }
       const actualizada = await completarLabor(labor.id, payload)
+      const avisoService = actualizada.maquinariaMantenimientoVencido
+        ? ` ⚠ Atención (RN-06): La maquinaria «${actualizada.maquinariaNombre}» alcanzó el umbral de mantenimiento preventivo.`
+        : ''
       onGuardado(
-        `Orden #${actualizada.id} completada. Costo total consolidado: $ ${formatearNumero(actualizada.costoTotalCalculado)}.`,
+        `Orden #${actualizada.id} completada. Costo total consolidado: $ ${formatearNumero(actualizada.costoTotalCalculado)}.${avisoService}`,
       )
     } catch (err) {
       setError(err.message || 'No se pudo completar la orden de trabajo.')
@@ -181,9 +199,29 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
 
         {tieneMaquinaria && (
           <div className="campo">
-            <label htmlFor="completar-horas">
-              Horas reales de máquina empleadas * (máx. {topeHoras} hs)
-            </label>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '0.5rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <label htmlFor="completar-horas">
+                Horas reales de máquina empleadas * (máx. {topeHoras} hs)
+              </label>
+              {horasSugeridasDesdeInicio && (
+                <button
+                  type="button"
+                  className="btn btn--secundario btn--chico"
+                  onClick={() => setHorasMaquina(horasSugeridasDesdeInicio)}
+                  disabled={guardando}
+                >
+                  Usar tiempo desde inicio ({horasSugeridasDesdeInicio} hs)
+                </button>
+              )}
+            </div>
             <input
               id="completar-horas"
               type="number"
