@@ -260,6 +260,38 @@ Las variables y unidades coinciden con las de la evaluación de reglas climátic
 | Lote inexistente | `404` |
 | API climática caída y sin lectura en caché vigente | `503` |
 
+## Autorización climática de labores (HU-10)
+
+| Método | Endpoint | Roles | Descripción |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/labores/{id}/validar-clima` | `ADMIN`, `AGRONOMO`, `OPERARIO` | Consulta el clima actual del lote (HU-08), lo evalúa contra la regla del tipo de labor (HU-07) y deja la labor en `APROBADA_CLIMA` o `BLOQUEADA_CLIMA` (CU-04, RN-01) |
+| `POST` | `/api/labores/{id}/autorizacion-manual` | `ADMIN`, `AGRONOMO` | Aprueba la labor sin datos climáticos cuando la API no responde y no hay caché vigente, con una justificación obligatoria (RN-11) |
+
+```json
+{
+  "aprobada": false, "autorizacionManual": false, "estadoResultante": "BLOQUEADA_CLIMA",
+  "incumplimientos": ["Viento (25 km/h) supera el máximo permitido (15.00 km/h)"],
+  "mensajeAlerta": "Viento superior a 15 km/h genera deriva peligrosa de fitosanitarios o lluvia inminente.",
+  "temperaturaC": 24.5, "vientoVelocidadKmh": 25, "probabilidadLluviaPct": 10, "humedadRelativaPct": 55,
+  "fechaLectura": "2026-11-06T09:30:00", "origen": "API", "obtenidaEn": "2026-11-06T12:31:05Z",
+  "labor": { "id": 3, "estado": "BLOQUEADA_CLIMA", "vientoVelocidadKmh": 25.00, "...": "..." }
+}
+```
+
+* Se valida desde `PLANIFICADA` o `BLOQUEADA_CLIMA` (revalidación). Las labores de `LABRANZA` no requieren validación (RN-01).
+* El resultado de la evaluación se informa siempre con `200`: si alguna variable está fuera de umbral la labor queda en `BLOQUEADA_CLIMA` con los incumplimientos y el `mensajeAlerta` de la regla; las reservas de stock se mantienen. En ambos casos se guardan en la labor la temperatura, el viento, la probabilidad de lluvia y la humedad usados.
+* Si la API falla se usa la lectura en caché del lote (`"origen": "CACHE"`). Sin API ni caché se responde `503` y la labor no cambia (RF-06, criterio 5).
+* La consulta al proveedor se hace fuera de la transacción; luego la labor se bloquea (`FOR UPDATE`) y se vuelve a verificar su estado antes de aplicar el resultado.
+* La autorización manual consulta primero el clima: si el servicio responde (por API o caché) se rechaza con `409`. Si procede, la labor pasa a `APROBADA_CLIMA` y se agrega a `observacionesClimaticas` quién autorizó, cuándo y la justificación.
+
+| Situación | Respuesta |
+| :--- | :--- |
+| Justificación vacía o con menos de 10 caracteres | `400` |
+| Autorización manual por `OPERARIO` | `403` |
+| Labor inexistente | `404` |
+| Labor de `LABRANZA`, en estado distinto de `PLANIFICADA`/`BLOQUEADA_CLIMA`, tipo sin regla climática o autorización manual con el servicio climático disponible | `409` |
+| API climática caída y sin lectura en caché vigente | `503` |
+
 ## Tablero financiero — Margen Neto y ROI por lote (HU-13)
 
 | Método | Endpoint | Roles | Descripción |
