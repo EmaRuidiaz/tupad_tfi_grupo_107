@@ -292,6 +292,49 @@ Las variables y unidades coinciden con las de la evaluación de reglas climátic
 | Labor de `LABRANZA`, en estado distinto de `PLANIFICADA`/`BLOQUEADA_CLIMA`, tipo sin regla climática o autorización manual con el servicio climático disponible | `409` |
 | API climática caída y sin lectura en caché vigente | `503` |
 
+## Registro de cosechas (HU-12)
+
+| Método | Endpoint | Roles | Descripción |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/cultivos` | Todos | Catálogo de cultivos ordenado por nombre (selector del formulario de cosecha) |
+| `GET` | `/api/cosechas` | Todos | Cosechas registradas, de la más reciente a la más antigua. Admite `?loteId=` |
+| `GET` | `/api/cosechas/{id}` | Todos | Detalle de una cosecha |
+| `POST` | `/api/cosechas` | `ADMIN`, `AGRONOMO` | Registra la cosecha consolidada que cierra el ciclo productivo del lote (CU-05), asociada al usuario del token (RN-04) |
+
+```bash
+curl -X POST http://localhost:8080/api/cosechas \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"loteId": 3, "cultivoId": 3, "fechaCosecha": "2026-11-11", "toneladasTotales": 1350, "precioVentaPorTon": 210000, "laborId": null}'
+```
+
+```json
+{
+  "id": 1, "loteId": 3, "loteNombre": "Lote Este - Las Acacias", "superficieHa": 150.00,
+  "cultivoId": 3, "cultivoNombre": "Maíz Tardío", "cultivoEspecie": "Maíz", "laborId": null,
+  "fechaCosecha": "2026-11-11", "toneladasTotales": 1350.00, "rindeTonPorHa": 9.00, "precioVentaPorTon": 210000.00,
+  "ingresoBrutoTotal": 283500000.00, "costosCicloImputados": 0.00, "margenNetoCalculado": 283500000.00,
+  "roiPct": null, "usuarioUsername": "agronomo1"
+}
+```
+
+**Reglas que aplica el backend (CU-05, RN-02, RN-04, RN-05, RN-12):**
+* Sólo se registra la cosecha de un lote en `LISTO_COSECHA` (RN-02). Al registrarla, el lote pasa automáticamente a `COSECHADO` en la misma transacción. El lote se bloquea (`FOR UPDATE`) para que dos registros simultáneos no cierren dos veces el ciclo.
+* La `fechaCosecha` no puede ser futura y debe ser posterior a la última cosecha del lote: cada registro cierra un ciclo distinto (RN-12).
+* Campos calculados, fijados al registrar y no recalculados (RN-05):
+  * `rindeTonPorHa = toneladasTotales / lote.superficieHa`
+  * `ingresoBrutoTotal = toneladasTotales * precioVentaPorTon`
+  * `margenNetoCalculado = ingresoBrutoTotal - SUM(costo_total_calculado)` de las labores `COMPLETADA` del lote ejecutadas en la ventana `(fecha_cosecha_anterior, fecha_cosecha]` (RN-12). Se usa el mismo criterio de fecha que el Tablero Financiero (HU-13): la de ejecución o, si falta, la planificada. Puede ser negativo (pérdida).
+  * La respuesta agrega `costosCicloImputados` (`ingreso - margen`) y `roiPct`, que es `null` si el ciclo no tuvo costos.
+* `laborId` es opcional y vincula la orden de trilla. Tiene que ser una labor de `COSECHA`, `COMPLETADA`, del mismo lote y del ciclo actual, y no puede estar vinculada a otra cosecha (`labor_id` es `UNIQUE`).
+* Las cosechas no se editan ni se eliminan: son el cierre inmutable del ciclo productivo (RN-04, RN-12). Un lote con cosechas tampoco se puede eliminar (HU-03).
+
+| Situación | Respuesta |
+| :--- | :--- |
+| Campos obligatorios faltantes, valores negativos, fecha futura o anterior a la última cosecha, labor de otro lote, de otro tipo o con fecha posterior a la cosecha, o valores calculados que exceden la precisión de la base | `400` |
+| Registro por un usuario con rol `OPERARIO` | `403` |
+| Lote, cultivo, labor o cosecha inexistente | `404` |
+| Lote que no está `LISTO_COSECHA`, labor de cosecha no `COMPLETADA`, ya vinculada a otra cosecha o de un ciclo anterior | `409` |
+
 ## Tablero financiero — Margen Neto y ROI por lote (HU-13)
 
 | Método | Endpoint | Roles | Descripción |
