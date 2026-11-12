@@ -18,6 +18,9 @@ import java.util.Optional;
 @Repository
 public interface LaborAgricolaRepository extends JpaRepository<LaborAgricola, Long> {
 
+    /** Labores de un lote en un estado dado (HU-12: costos de las labores COMPLETADA del ciclo). */
+    List<LaborAgricola> findByLoteIdAndEstado(Long loteId, EstadoLabor estado);
+
     @EntityGraph(attributePaths = {"lote", "maquinaria", "usuario", "insumos", "insumos.insumo"})
     List<LaborAgricola> findAllByOrderByFechaPlanificadaDescIdDesc();
 
