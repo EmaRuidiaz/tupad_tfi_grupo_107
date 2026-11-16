@@ -4,6 +4,7 @@ import Login from './pages/Login.jsx'
 import Inicio from './pages/Inicio.jsx'
 import Lotes from './pages/Lotes.jsx'
 import Insumos from './pages/Insumos.jsx'
+import Compras from './pages/Compras.jsx'
 import Maquinaria from './pages/Maquinaria.jsx'
 import ReglasClimaticas from './pages/ReglasClimaticas.jsx'
 import Labores from './pages/Labores.jsx'
@@ -19,6 +20,7 @@ function App() {
         <Route index element={<Inicio />} />
         <Route path="lotes" element={<Lotes />} />
         <Route path="insumos" element={<Insumos />} />
+        <Route path="compras" element={<Compras />} />
         <Route path="maquinaria" element={<Maquinaria />} />
         <Route path="reglas-climaticas" element={<ReglasClimaticas />} />
         <Route path="labores" element={<Labores />} />

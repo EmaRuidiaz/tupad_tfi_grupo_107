@@ -86,3 +86,7 @@ INSERT INTO movimiento_stock (insumo_id, fecha, tipo, cantidad, usuario_id, labo
 (4, '2026-05-10 18:00:00', 'EGRESO_LABOR', -165.00, 2, 1, NULL, 'Gasoil consumido en labor de siembra Lote Norte'),
 (2, '2026-06-20 15:30:00', 'EGRESO_LABOR', -240.00, 2, 2, NULL, 'Herbicida aplicado en pulverización Lote Norte'),
 (4, '2026-06-20 15:30:00', 'EGRESO_LABOR', -143.00, 2, 2, NULL, 'Gasoil consumido en pulverización Lote Norte');
+
+ALTER TABLE compra_insumo ALTER COLUMN id RESTART WITH 2;	--- el seed tiene 1, proximo seria 2
+ALTER TABLE detalle_compra ALTER COLUMN id RESTART WITH 2;	--- el seed tiene 1, proximo seria 2
+ALTER TABLE movimiento_stock ALTER COLUMN id RESTART WITH 10;	--- el seed tiene 9, proximo seria 10
