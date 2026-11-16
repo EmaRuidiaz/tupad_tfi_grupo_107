@@ -3,6 +3,7 @@ export const menuItems = [
   { path: '/', label: 'Inicio', end: true },
   { path: '/lotes', label: 'Lotes' },
   { path: '/insumos', label: 'Insumos' },
+  { path: '/compras', label: 'Compras' },
   { path: '/maquinaria', label: 'Maquinaria' },
   { path: '/reglas-climaticas', label: 'Reglas climáticas' },
   { path: '/labores', label: 'Labores' },
