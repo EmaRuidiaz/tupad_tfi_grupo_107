@@ -50,7 +50,7 @@ function ReprogramarLaborModal({ labor, onCerrar, onGuardado }) {
   return (
     <Modal
       abierto
-      titulo={`Reprogramar labor #${labor.id} (CU-08)`}
+      titulo={`Reprogramar labor #${labor.id}`}
       onCerrar={onCerrar}
     >
       <div className="resumen-ajuste">

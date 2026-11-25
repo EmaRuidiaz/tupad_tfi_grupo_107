@@ -108,7 +108,7 @@ function ValidarClimaLaborModal({ labor, onCerrar }) {
 
       {resultado?.autorizacionManual && (
         <div className="alerta alerta--exito" role="status">
-          Labor autorizada manualmente por contingencia climática (RN-11). Ya
+          Labor autorizada manualmente por contingencia climática. Ya
           puede iniciarse; la justificación quedó registrada en las
           observaciones.
         </div>
@@ -183,8 +183,7 @@ function ValidarClimaLaborModal({ labor, onCerrar }) {
           <form onSubmit={autorizar} className="formulario">
             <p className="texto-suave texto-chico">
               Sin datos climáticos, un agrónomo o administrador puede autorizar
-              la labor manualmente dejando constancia de la justificación
-              (RN-11).
+              la labor manualmente dejando constancia de la justificación.
             </p>
             {errorAutorizacion && (
               <div className="alerta alerta--error">{errorAutorizacion}</div>

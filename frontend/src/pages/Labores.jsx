@@ -244,7 +244,7 @@ function Labores() {
   const detalleModalInicio = laborAIniciar
     ? `Al iniciar, la orden pasará a estado En ejecución, se descontará el stock físico de los insumos reservados (registrando el egreso en el historial) y la maquinaria asignada pasará a estado En labor.${
         laborAIniciar.maquinariaMantenimientoVencido
-          ? ` ⚠ ATENCIÓN (RN-06): La maquinaria "${laborAIniciar.maquinariaNombre}" tiene el umbral de mantenimiento vencido; se recomienda registrar el service al finalizar.`
+          ? ` ⚠ ATENCIÓN: La maquinaria "${laborAIniciar.maquinariaNombre}" tiene el umbral de mantenimiento vencido; se recomienda registrar el service al finalizar.`
           : ''
       }`
     : ''
@@ -256,8 +256,7 @@ function Labores() {
           <h1>Labores Agrícolas</h1>
           <p className="pagina__subtitulo">
             Planificación de órdenes de trabajo, reserva de insumos, ejecución
-            en campo y cierre con impacto en stock, horómetros y costos (HU-09 /
-            HU-11).
+            en campo y cierre con impacto en stock, horómetros y costos.
           </p>
         </div>
 
@@ -665,7 +664,7 @@ function Labores() {
 
       <ConfirmModal
         abierto={Boolean(laborAIniciar)}
-        titulo="Iniciar ejecución de labor (CU-04 / HU-11)"
+        titulo="Iniciar ejecución de labor"
         mensaje={
           laborAIniciar
             ? `¿Confirmás el inicio en campo de la orden #${laborAIniciar.id} (${etiquetaTipoLabor(laborAIniciar.tipoLabor)} en "${laborAIniciar.loteNombre}")?`
@@ -686,7 +685,7 @@ function Labores() {
 
       <ConfirmModal
         abierto={Boolean(laborACancelar)}
-        titulo="Cancelar orden de trabajo (CU-08)"
+        titulo="Cancelar orden de trabajo"
         mensaje={
           laborACancelar
             ? `¿Confirmás la cancelación de la orden #${laborACancelar.id} (${etiquetaTipoLabor(laborACancelar.tipoLabor)} en "${laborACancelar.loteNombre}")?`

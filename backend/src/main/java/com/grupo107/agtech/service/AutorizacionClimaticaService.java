@@ -102,7 +102,7 @@ public class AutorizacionClimaticaService {
             proveedorClima.obtenerClimaActual(lote.latitud(), lote.longitud());
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "El servicio climático está disponible: la labor debe validarse con los datos actuales"
-                            + " (la autorización manual sólo procede ante una contingencia climática, RN-11)");
+                            + " (la autorización manual sólo procede ante una contingencia climática)");
         } catch (ClimaNoDisponibleException ex) {
             // Contingencia confirmada: no hay API ni caché vigente.
         }
@@ -129,7 +129,7 @@ public class AutorizacionClimaticaService {
     private void verificarValidable(LaborAgricola labor) {
         if (!labor.getTipoLabor().requiereValidacionClimatica()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Las labores de " + labor.getTipoLabor() + " no requieren validación climática (RN-01):"
+                    "Las labores de " + labor.getTipoLabor() + " no requieren validación climática:"
                             + " pueden iniciarse directamente");
         }
         EstadoLabor estado = labor.getEstado();

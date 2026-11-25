@@ -72,7 +72,7 @@ function DetalleLaborModal({ labor, onCerrar }) {
               {formatearNumero(labor.costoMaquinaria)})
             </div>
             <div>
-              <strong>Costo total consolidado (RN-05):</strong>{' '}
+              <strong>Costo total consolidado:</strong>{' '}
               <strong>$ {formatearNumero(labor.costoTotalCalculado)}</strong>{' '}
               (Insumos: $ {formatearNumero(costoInsumosMostrado)} + Maquinaria:
               $ {formatearNumero(labor.costoMaquinaria)})

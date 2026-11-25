@@ -7,7 +7,7 @@ import lombok.Data;
 @Data
 public class AutorizacionManualRequest {
 
-    @NotBlank(message = "La justificación de la autorización manual es obligatoria (RN-11)")
+    @NotBlank(message = "La justificación de la autorización manual es obligatoria")
     @Size(min = 10, max = 500, message = "La justificación debe tener entre 10 y 500 caracteres")
     private String justificacion;
 }

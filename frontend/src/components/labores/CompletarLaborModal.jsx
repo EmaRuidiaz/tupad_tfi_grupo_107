@@ -142,7 +142,7 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
       }
       const actualizada = await completarLabor(labor.id, payload)
       const avisoService = actualizada.maquinariaMantenimientoVencido
-        ? ` ⚠ Atención (RN-06): La maquinaria «${actualizada.maquinariaNombre}» alcanzó el umbral de mantenimiento preventivo.`
+        ? ` ⚠ Atención: La maquinaria «${actualizada.maquinariaNombre}» alcanzó el umbral de mantenimiento preventivo.`
         : ''
       onGuardado(
         `Orden #${actualizada.id} completada. Costo total consolidado: $ ${formatearNumero(actualizada.costoTotalCalculado)}.${avisoService}`,
@@ -158,7 +158,7 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
     <Modal
       abierto
       ancho
-      titulo={`Completar orden de trabajo #${labor.id} (HU-11)`}
+      titulo={`Completar orden de trabajo #${labor.id}`}
       onCerrar={() => {
         if (!guardando) onCerrar()
       }}
@@ -193,7 +193,7 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
           <div className="alerta alerta--exito" role="status">
             Al completar esta labor de <strong>Siembra</strong>, el lote{' '}
             <strong>{labor.loteNombre}</strong> pasará automáticamente al estado{' '}
-            <strong>Sembrado</strong> (RN-08).
+            <strong>Sembrado</strong>.
           </div>
         )}
 
@@ -249,7 +249,7 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
                 {proyeccionHorometro.superaraService && (
                   <strong style={{ color: '#b45309' }}>
                     {' '}
-                    · ⚠ Alcanzará el umbral de mantenimiento (RN-06)
+                    · ⚠ Alcanzará el umbral de mantenimiento
                   </strong>
                 )}
               </span>
@@ -279,7 +279,7 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
               : `${labor.insumos.length} línea(s) en estado Consumido.`}
           </div>
           <div>
-            <strong>Subtotal insumos (histórico, RN-05):</strong> ${' '}
+            <strong>Subtotal insumos (histórico):</strong> ${' '}
             {formatearNumero(costoInsumos)}
           </div>
           {tieneMaquinaria && (
@@ -292,7 +292,7 @@ function CompletarLaborModal({ labor, maquinarias = [], onCerrar, onGuardado }) 
             </div>
           )}
           <div>
-            <strong>Costo total consolidado (RN-05, inmutable):</strong>{' '}
+            <strong>Costo total consolidado (inmutable):</strong>{' '}
             <strong>$ {formatearNumero(costoTotalProyectado)}</strong>
           </div>
         </div>
