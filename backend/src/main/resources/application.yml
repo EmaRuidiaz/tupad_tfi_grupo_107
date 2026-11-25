@@ -8,7 +8,7 @@ spring:
     open-in-view: false
 
 server:
-  port: 8080
+  port: ${PORT:8080}
 
 # Origenes permitidos por CORS (frontend React/Vite). Sobrescribible por variable de entorno.
 app:
