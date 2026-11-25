@@ -59,3 +59,8 @@ tupad_tfi_grupo_107/
 ├── .gitignore          # Archivos y configuraciones excluidas del repositorio
 └── README.md           # Documentación principal del proyecto
 ```
+
+## 6. Documentación Adicional y Entrega Final
+
+* [**Complementos de Entrega Final**](docs/entrega-final/complementos_entrega_final.md): Requisitos adicionales propuestos por el equipo, documentación del uso de IA y sus beneficios en el desarrollo, y requerimientos funcionales proyectados a futuro.
+* [**Índice de Documentación Técnica**](docs/README.md) y [**Diseño y Módulos (2.ª Entrega)**](docs/entrega-2/diseno_y_modulos.md).
