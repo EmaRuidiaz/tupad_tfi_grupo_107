@@ -46,6 +46,7 @@ public class CompraService {
     private final InsumoRepository insumoRepository;
     private final MovimientoStockRepository movimientoStockRepository;
     private final UsuarioRepository usuarioRepository;
+    private static final int ENTEROS_MAX_DECIMAL_12_2 = 10;
 
     public CompraService(CompraInsumoRepository compraRepository,
                          ProveedorRepository proveedorRepository,
@@ -165,6 +166,21 @@ public class CompraService {
         }
 
         return CompraResponse.from(guardada);
+    }
+
+    private void verificarCapacidadDecimal12(BigDecimal valor, String campo) {
+        if (valor == null) {
+            return;
+        }
+        BigDecimal absoluto = valor.abs();
+        if (absoluto.compareTo(BigDecimal.ONE) >= 0) {
+            int enteros = absoluto.setScale(0, RoundingMode.DOWN).toPlainString().length();
+            if (enteros > ENTEROS_MAX_DECIMAL_12_2) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        campo + " (" + valor.toPlainString() + ") excede la capacidad DECIMAL(12, 2) ("
+                                + ENTEROS_MAX_DECIMAL_12_2 + " dígitos enteros)");
+            }
+        }
     }
 
     private Usuario buscarUsuario(String username) {

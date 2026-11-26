@@ -361,6 +361,52 @@ curl -X POST http://localhost:8080/api/cosechas \
 | Consulta por un usuario con rol `OPERARIO` (doc 07 §7.2) | `403` |
 | Lote inexistente en `/api/tablero-financiero/lotes/{loteId}` | `404` |
 
+## Compras y Proveedores
+
+### Endpoints
+
+| Método | Endpoint | Rol permitido | Descripción |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/compras` | ADMIN | Registra una compra (cabecera + detalles). |
+| `GET` | `/api/compras` | ADMIN, AGRONOMO | Lista compras. |
+| `GET` | `/api/compras/{id}` | ADMIN, AGRONOMO | Detalle de una compra. |
+| `GET` | `/api/proveedores` | ADMIN, AGRONOMO | Lista proveedores. |
+| `GET` | `/api/proveedores/{id}` | ADMIN, AGRONOMO | Detalle de un proveedor. |
+| `POST` | `/api/proveedores` | ADMIN | Crea un proveedor. |
+| `PUT` | `/api/proveedores/{id}` | ADMIN | Actualiza un proveedor. |
+| `DELETE` | `/api/proveedores/{id}` | ADMIN | Elimina un proveedor sin compras. |
+
+**Reglas que aplica el backend**
+
+* RN-03 / RN-13: bloqueo pesimista `SELECT ... FOR UPDATE` sobre los insumos, ordenados por `insumo_id ASC`, para evitar *deadlocks* y sobreasignación.
+* RN-04: se toma el `usuario_id` del JWT; toda compra y movimiento de stock queda auditado.
+* RN-09: los `movimiento_stock` son inmutables. Una corrección se hace con un `AJUSTE`.
+* RN-05: `costo_total_calculado` de labores `COMPLETADA` **no** se recalcula al actualizar `precio_unitario` del insumo.
+* Coherencia temporal: `movimiento_stock.fecha = compra.fecha_compra` (no `now()`).
+* Fecha no futura: `@PastOrPresent` en `CompraRequest.fechaCompra`.
+* Capacidad `DECIMAL(12,2)`: se valida `subtotal`, `totalCompra` y `stock_actual + cantidad` antes de persistir.
+
+### Códigos HTTP
+
+| Código | Situación |
+| :--- | :--- |
+| `201 Created` | Compra registrada con éxito. |
+| `400 Bad Request` | Validación de campos, fecha futura, desborde de `DECIMAL(12,2)`, insumo inexistente. |
+| `401 Unauthorized` | Token ausente o vencido. |
+| `403 Forbidden` | Rol sin permiso (matriz doc 07 §7.2). |
+| `404 Not Found` | Compra o proveedor inexistente. |
+| `409 Conflict` | Conflicto de integridad (ej. eliminar proveedor con compras). |
+
+### Tests
+
+`CompraControllerTests` cubre:
+- Permisos por rol (`OPERARIO` denegado en `GET /compras` y `GET /proveedores`).
+- Rollback atómico multi-línea (RF-03 CA-3).
+- Inmutabilidad de `costo_total_calculado` (RN-05).
+- Desborde de `DECIMAL(12,2)` en subtotal, total y stock resultante.
+- Fecha futura rechazada.
+- `movimiento_stock.fecha == compra.fecha_compra`.
+
 ## Configuración útil
 
 | Variable | Default | Uso |

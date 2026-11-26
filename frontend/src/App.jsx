@@ -5,6 +5,7 @@ import Inicio from './pages/Inicio.jsx'
 import Lotes from './pages/Lotes.jsx'
 import Insumos from './pages/Insumos.jsx'
 import Compras from './pages/Compras.jsx'
+import Proveedores from './pages/Proveedores.jsx'
 import Maquinaria from './pages/Maquinaria.jsx'
 import ReglasClimaticas from './pages/ReglasClimaticas.jsx'
 import Labores from './pages/Labores.jsx'
@@ -21,6 +22,7 @@ function App() {
         <Route path="lotes" element={<Lotes />} />
         <Route path="insumos" element={<Insumos />} />
         <Route path="compras" element={<Compras />} />
+	<Route path="proveedores" element={<Proveedores />} />
         <Route path="maquinaria" element={<Maquinaria />} />
         <Route path="reglas-climaticas" element={<ReglasClimaticas />} />
         <Route path="labores" element={<Labores />} />

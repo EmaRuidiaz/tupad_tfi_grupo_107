@@ -28,11 +28,13 @@ public class CompraController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGRONOMO')")
     public List<CompraResponse> listar() {
         return compraService.listar();
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGRONOMO')")
     public CompraResponse obtener(@PathVariable Long id) {
         return compraService.obtenerPorId(id);
     }
