@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Modal from '../components/Modal.jsx'
 import CompraFormModal from '../components/compras/CompraFormModal.jsx'
 import { getSession, isAdmin } from '../services/api.js'
 import { listarCompras, listarProveedores } from '../services/comprasService.js'
@@ -17,25 +18,36 @@ function Compras() {
   const [proveedorFiltro, setProveedorFiltro] = useState('TODOS')
   const [busqueda, setBusqueda] = useState('')
   const [modalAbierto, setModalAbierto] = useState(false)
+  const [compraDetalle, setCompraDetalle] = useState(null)
 
-  const recargar = useCallback(async () => {
-    setErrorGlobal('')
+  const recargar = useCallback(async (esCancelado = () => false) => {
+    if (!esCancelado()) setErrorGlobal('')
     try {
       const [listaCompras, listaProv] = await Promise.all([
         listarCompras(),
         listarProveedores(),
       ])
-      setCompras(listaCompras)
-      setProveedores(listaProv)
+      if (!esCancelado()) {
+        setCompras(listaCompras)
+        setProveedores(listaProv)
+      }
     } catch (err) {
-      setErrorGlobal(err.message || 'No se pudieron cargar las compras.')
+      if (!esCancelado()) {
+        setErrorGlobal(err.message || 'No se pudieron cargar las compras.')
+      }
     } finally {
-      setCargando(false)
+      if (!esCancelado()) {
+        setCargando(false)
+      }
     }
   }, [])
 
   useEffect(() => {
-    recargar()
+    let cancelado = false
+    recargar(() => cancelado)
+    return () => {
+      cancelado = true
+    }
   }, [recargar])
 
   const comprasFiltradas = useMemo(() => {
@@ -60,7 +72,7 @@ function Compras() {
   }, [comprasFiltradas])
 
   return (
-    <section className="pagina">
+  <section className="pagina">
       <div className="pagina__encabezado">
         <div>
           <h1>Compras de Insumos</h1>
@@ -171,39 +183,13 @@ function Compras() {
                   </td>
                   <td>
                     <div className="acciones-celda">
-                      <details>
-                        <summary className="btn btn--secundario btn--chico">
-                          Ver líneas
-                        </summary>
-                        <div style={{ marginTop: '0.5rem' }}>
-                          <table className="tabla">
-                            <thead>
-                              <tr>
-                                <th>Insumo</th>
-                                <th className="texto-derecha">Cantidad</th>
-                                <th className="texto-derecha">Precio</th>
-                                <th className="texto-derecha">Subtotal</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {c.detalles.map((d) => (
-                                <tr key={d.id}>
-                                  <td>{d.insumoNombre}</td>
-                                  <td className="texto-derecha">
-                                    {formatearNumero(d.cantidad)} {d.unidadMedida}
-                                  </td>
-                                  <td className="texto-derecha">
-                                    $ {formatearNumero(d.precioUnitario)}
-                                  </td>
-                                  <td className="texto-derecha">
-                                    $ {formatearNumero(d.subtotal)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </details>
+                      <button
+                        type="button"
+                        className="btn btn--secundario btn--chico"
+                        onClick={() => setCompraDetalle(c)}
+                      >
+                        Ver detalle
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -211,6 +197,62 @@ function Compras() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {compraDetalle && (
+        <Modal
+          abierto
+          ancho
+          titulo={`Detalle de compra #${compraDetalle.id}`}
+          onCerrar={() => setCompraDetalle(null)}
+        >
+          <p className="aviso" style={{ marginTop: 0 }}>
+            <strong>Proveedor:</strong> {compraDetalle.proveedorNombre} (CUIT:{' '}
+            {compraDetalle.proveedorCuit}) · <strong>Fecha:</strong>{' '}
+            {formatearFecha(compraDetalle.fechaCompra)}
+          </p>
+          <div className="tabla-contenedor">
+            <table className="tabla">
+              <thead>
+                <tr>
+                  <th>Insumo</th>
+                  <th className="texto-derecha">Cantidad</th>
+                  <th className="texto-derecha">Precio</th>
+                  <th className="texto-derecha">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(compraDetalle.detalles || []).map((d) => (
+                  <tr key={d.id}>
+                    <td>{d.insumoNombre}</td>
+                    <td className="texto-derecha">
+                      {formatearNumero(d.cantidad)} {d.unidadMedida}
+                    </td>
+                    <td className="texto-derecha">$ {formatearNumero(d.precioUnitario)}</td>
+                    <td className="texto-derecha">$ {formatearNumero(d.subtotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="resumen-ajuste" style={{ marginTop: '0.75rem' }}>
+            <div>
+              <strong>Líneas:</strong> {compraDetalle.detalles?.length || 0}
+            </div>
+            <div>
+              <strong>Total:</strong> $ {formatearNumero(compraDetalle.totalCompra)}
+            </div>
+          </div>
+          <div className="modal__pie">
+            <button
+              type="button"
+              className="btn btn--primario"
+              onClick={() => setCompraDetalle(null)}
+            >
+              Cerrar
+            </button>
+          </div>
+        </Modal>
       )}
 
       {modalAbierto && (

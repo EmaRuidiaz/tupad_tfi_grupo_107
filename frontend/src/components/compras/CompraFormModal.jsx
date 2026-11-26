@@ -14,6 +14,11 @@ function fechaHoraActualLocal() {
   return `${year}-${month}-${day}T${hours}:${minutes}`
 }
 
+function esNumeroFinito(valor) {
+  if (valor === '' || valor === null || valor === undefined) return false
+  return Number.isFinite(Number(valor))
+}
+
 function CompraFormModal({ proveedores, onCerrar, onGuardado }) {
   const [form, setForm] = useState({
     proveedorId: '',
@@ -81,10 +86,22 @@ function CompraFormModal({ proveedores, onCerrar, onGuardado }) {
     e.preventDefault()
     setError('')
     if (!form.proveedorId) { setError('Seleccioná un proveedor.'); return }
+    if (!form.fechaCompra) { setError('Seleccioná la fecha y hora de compra.'); return }
+    if (form.fechaCompra > fechaHoraActualLocal()) {
+      setError('La fecha y hora de compra no puede ser futura.')
+      return
+    }
     if (form.detalles.length === 0) { setError('Agregá al menos un insumo.'); return }
     for (const d of form.detalles) {
-      if (!d.insumoId || Number(d.cantidad) <= 0 || Number(d.precioUnitario) < 0) {
-        setError('Revisá cantidades y precios de todas las líneas.'); return
+      if (
+        !d.insumoId ||
+        !esNumeroFinito(d.cantidad) ||
+        Number(d.cantidad) <= 0 ||
+        !esNumeroFinito(d.precioUnitario) ||
+        Number(d.precioUnitario) < 0
+      ) {
+        setError('Revisá cantidades y precios de todas las líneas.')
+        return
       }
     }
     setGuardando(true)
@@ -111,7 +128,7 @@ function CompraFormModal({ proveedores, onCerrar, onGuardado }) {
   }
 
   return (
-    <Modal abierto ancho titulo="Registrar compra (CU-02)" onCerrar={onCerrar}>
+<Modal abierto ancho titulo="Registrar compra (CU-02)" onCerrar={onCerrar}>
       {error && <div className="alerta alerta--error">{error}</div>}
       <form onSubmit={manejarSubmit} className="formulario">
         <div className="fila-campos">
@@ -137,6 +154,7 @@ function CompraFormModal({ proveedores, onCerrar, onGuardado }) {
               id="compra-fecha"
               type="datetime-local"
               required
+              max={fechaHoraActualLocal()}
               value={form.fechaCompra}
               onChange={(e) => setForm({ ...form, fechaCompra: e.target.value })}
             />

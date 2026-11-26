@@ -1,5 +1,12 @@
 package com.grupo107.agtech;
 
+import com.grupo107.agtech.model.EstadoLabor;
+import com.grupo107.agtech.model.Insumo;
+import com.grupo107.agtech.model.LaborAgricola;
+import com.grupo107.agtech.repository.CompraInsumoRepository;
+import com.grupo107.agtech.repository.InsumoRepository;
+import com.grupo107.agtech.repository.LaborAgricolaRepository;
+import com.grupo107.agtech.repository.MovimientoStockRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,7 +16,11 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -22,6 +33,18 @@ class CompraControllerTests {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private InsumoRepository insumoRepository;
+
+    @Autowired
+    private CompraInsumoRepository compraInsumoRepository;
+
+    @Autowired
+    private MovimientoStockRepository movimientoStockRepository;
+
+    @Autowired
+    private LaborAgricolaRepository laborAgricolaRepository;
 
     private String bearer(String username) throws Exception {
         String body = mockMvc.perform(post("/api/auth/login")
@@ -48,13 +71,11 @@ class CompraControllerTests {
 
     @Test
     void adminRegistraCompraYSeActualizaStockYPrecio() throws Exception {
-        // Pre-condiciones del seed: insumo 5 "Fungicida Curalotodo Pro" stock=45, precio=32
         mockMvc.perform(get("/api/insumos/5").header("Authorization", bearer("admin")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.stockActual").value(45.0))
                 .andExpect(jsonPath("$.precioUnitario").value(32.0));
 
-        // Registrar compra de 100 unidades a $30
         mockMvc.perform(post("/api/compras")
                         .header("Authorization", bearer("admin"))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -67,13 +88,11 @@ class CompraControllerTests {
                 .andExpect(jsonPath("$.detalles[0].insumoNombre").value("Fungicida Curalotodo Pro"))
                 .andExpect(jsonPath("$.detalles[0].subtotal").value(3000.0));
 
-        // Post-condiciones: stock actualizado, precio actualizado
         mockMvc.perform(get("/api/insumos/5").header("Authorization", bearer("admin")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.stockActual").value(145.0))
                 .andExpect(jsonPath("$.precioUnitario").value(30.0));
 
-        // Movimiento de stock con tipo INGRESO_COMPRA
         mockMvc.perform(get("/api/insumos/5/movimientos").header("Authorization", bearer("admin")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.tipo == 'INGRESO_COMPRA')]", hasSize(1)))
@@ -101,6 +120,56 @@ class CompraControllerTests {
                 .andExpect(jsonPath("$.detalles", hasSize(2)));
     }
 
+    @Test
+    void compraMultiLineaConFallaEnSegundaLineaHaceRollbackAtomico() throws Exception {
+        Insumo insumo5Antes = insumoRepository.findById(5L).orElseThrow();
+        BigDecimal stockAntes = insumo5Antes.getStockActual();
+        BigDecimal precioAntes = insumo5Antes.getPrecioUnitario();
+        long totalComprasAntes = compraInsumoRepository.count();
+        int movsAntes = movimientoStockRepository.findByInsumoIdOrderByFechaDescIdDesc(5L).size();
+
+        String body = """
+                {
+                  "proveedorId": 2,
+                  "fechaCompra": "2026-11-14T10:00:00",
+                  "detalles": [
+                    {"insumoId": 5, "cantidad": 50, "precioUnitario": 25},
+                    {"insumoId": 99999, "cantidad": 10, "precioUnitario": 15}
+                  ]
+                }
+                """;
+
+        mockMvc.perform(post("/api/compras")
+                        .header("Authorization", bearer("admin"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isNotFound());
+
+        Insumo insumo5Despues = insumoRepository.findById(5L).orElseThrow();
+        assertEquals(0, stockAntes.compareTo(insumo5Despues.getStockActual()));
+        assertEquals(0, precioAntes.compareTo(insumo5Despues.getPrecioUnitario()));
+        assertEquals(totalComprasAntes, compraInsumoRepository.count());
+        assertEquals(movsAntes, movimientoStockRepository.findByInsumoIdOrderByFechaDescIdDesc(5L).size());
+    }
+
+    @Test
+    void cambioDePrecioPorCompraNoAlteraCostoHistoricoDeLaborCompletada() throws Exception {
+        LaborAgricola completada = laborAgricolaRepository.findAll().stream()
+                .filter(l -> l.getEstado() == EstadoLabor.COMPLETADA)
+                .findFirst()
+                .orElseThrow();
+        BigDecimal costoHistoricoAntes = completada.getCostoTotalCalculado();
+
+        mockMvc.perform(post("/api/compras")
+                        .header("Authorization", bearer("admin"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(compraJson(2L, 5L, "1.00", "9999.99")))
+                .andExpect(status().isCreated());
+
+        LaborAgricola completadaDespues = laborAgricolaRepository.findById(completada.getId()).orElseThrow();
+        assertEquals(0, costoHistoricoAntes.compareTo(completadaDespues.getCostoTotalCalculado()));
+    }
+
     // --- Autorización (matriz doc 07 §7.2) ---
 
     @Test
@@ -109,6 +178,14 @@ class CompraControllerTests {
                         .header("Authorization", bearer("operario1"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(compraJson(2L, 5L, "10", "30")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void operarioRecibe403AlListarComprasYProveedores() throws Exception {
+        mockMvc.perform(get("/api/compras").header("Authorization", bearer("operario1")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/proveedores").header("Authorization", bearer("operario1")))
                 .andExpect(status().isForbidden());
     }
 
@@ -178,6 +255,34 @@ class CompraControllerTests {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void fechaFuturaEnCompraDevuelve400() throws Exception {
+        String body = """
+                {
+                  "proveedorId": 2,
+                  "fechaCompra": "%s",
+                  "detalles": [
+                    {"insumoId": 5, "cantidad": 10, "precioUnitario": 30}
+                  ]
+                }
+                """.formatted(LocalDateTime.now().plusDays(1));
+
+        mockMvc.perform(post("/api/compras")
+                        .header("Authorization", bearer("admin"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void desbordeDecimal12Devuelve400() throws Exception {
+        mockMvc.perform(post("/api/compras")
+                        .header("Authorization", bearer("admin"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(compraJson(2L, 5L, "1000000.00", "100000.00")))
+                .andExpect(status().isBadRequest());
+    }
+
     // --- Recursos inexistentes ---
 
     @Test
@@ -207,8 +312,8 @@ class CompraControllerTests {
     // --- Consultas ---
 
     @Test
-    void cualquierRolAutenticadoPuedeListarCompras() throws Exception {
-        for (String user : new String[]{"admin", "agronomo1", "operario1"}) {
+    void adminYAgronomoPuedenListarCompras() throws Exception {
+        for (String user : new String[]{"admin", "agronomo1"}) {
             mockMvc.perform(get("/api/compras").header("Authorization", bearer(user)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))));
@@ -217,7 +322,6 @@ class CompraControllerTests {
 
     @Test
     void obtenerCompraPorIdDevuelveDetalleCompleto() throws Exception {
-        // La compra 1 viene del seed (data.sql)
         mockMvc.perform(get("/api/compras/1").header("Authorization", bearer("admin")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))

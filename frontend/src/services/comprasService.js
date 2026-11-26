@@ -18,3 +18,23 @@ export function registrarCompra(payload) {
 export function listarProveedores() {
   return apiFetch('/proveedores')
 }
+
+export function crearProveedor(payload) {
+  return apiFetch('/proveedores', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function actualizarProveedor(id, payload) {
+  return apiFetch(`/proveedores/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function eliminarProveedor(id) {
+  return apiFetch(`/proveedores/${id}`, {
+    method: 'DELETE',
+  })
+}
