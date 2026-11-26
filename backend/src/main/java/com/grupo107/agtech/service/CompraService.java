@@ -129,7 +129,10 @@ public class CompraService {
             Insumo insumo = insumosBloqueados.get(d.getInsumoId());
             BigDecimal cantidad = d.getCantidad().setScale(2, RoundingMode.HALF_UP);
             BigDecimal precio = d.getPrecioUnitario().setScale(2, RoundingMode.HALF_UP);
+            verificarCapacidadDecimal12(cantidad, "La cantidad");
+            verificarCapacidadDecimal12(precio, "El precio unitario");
             BigDecimal subtotal = cantidad.multiply(precio).setScale(2, RoundingMode.HALF_UP);
+            verificarCapacidadDecimal12(subtotal, "El subtotal de la línea");
 
             DetalleCompra detalle = new DetalleCompra();
             detalle.setInsumo(insumo);
@@ -140,13 +143,17 @@ public class CompraService {
 
             // Incrementar stock y actualizar precio de referencia (RN-05: el costo de las
             // labores ya completadas no se recalcula, pero el precio vigente sí se actualiza).
-            insumo.setStockActual(insumo.getStockActual().add(cantidad));
+            BigDecimal nuevoStock = insumo.getStockActual().add(cantidad);
+            verificarCapacidadDecimal12(nuevoStock, "El stock actualizado del insumo");
+            insumo.setStockActual(nuevoStock);
             insumo.setPrecioUnitario(precio);
             insumoRepository.save(insumo);
 
             total = total.add(subtotal);
         }
-        compra.setTotalCompra(total.setScale(2, RoundingMode.HALF_UP));
+        BigDecimal totalFinal = total.setScale(2, RoundingMode.HALF_UP);
+        verificarCapacidadDecimal12(totalFinal, "El total de la compra");
+        compra.setTotalCompra(totalFinal);
 
         // 3. Guardar la compra con sus detalles (cascade) y asegurar id para movimientos
         CompraInsumo guardada = compraRepository.saveAndFlush(compra);
