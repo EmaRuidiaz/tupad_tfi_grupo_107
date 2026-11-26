@@ -104,7 +104,7 @@ public class ReglaClimaticaService {
     private void validarReglasNegocio(ReglaClimaticaRequest request) {
         if (!request.getTipoLabor().requiereValidacionClimatica()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Las labores de tipo LABRANZA no llevan regla climática asociada (RN-01)");
+                    "Las labores de tipo LABRANZA no llevan regla climática asociada");
         }
         if (request.getVientoMinKmh().compareTo(request.getVientoMaxKmh()) > 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

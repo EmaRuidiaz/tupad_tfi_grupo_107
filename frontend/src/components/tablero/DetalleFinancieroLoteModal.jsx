@@ -196,7 +196,7 @@ function DetalleFinancieroLoteModal({ reporte, onCerrar }) {
 
       <div className="tarjetas-resumen" style={{ marginBottom: '1rem' }}>
         <div className="tarjeta-kpi">
-          <span className="tarjeta-kpi__titulo">Costos acumulados (RN-05)</span>
+          <span className="tarjeta-kpi__titulo">Costos acumulados</span>
           <strong className="tarjeta-kpi__valor">
             $ {formatearNumero(reporte.costosTotalesAcumulados)}
           </strong>
@@ -399,7 +399,7 @@ function DetalleFinancieroLoteModal({ reporte, onCerrar }) {
 
       {!reporte.cosechas || reporte.cosechas.length === 0 ? (
         <p className="aviso">
-          Aún no se registraron cosechas en este lote (RF-08, criterio 2).
+          Aún no se registraron cosechas en este lote.
         </p>
       ) : (
         <div className="tabla-contenedor" style={{ marginBottom: '1rem' }}>

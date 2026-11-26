@@ -25,3 +25,8 @@ replay_pid*
 
 # Requerimientos y notas locales
 normativas.txt
+
+# Variables de entorno reales (no ignorar .env.example)
+.env
+.env.*
+!.env.example

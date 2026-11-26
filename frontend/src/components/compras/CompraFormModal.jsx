@@ -128,7 +128,7 @@ function CompraFormModal({ proveedores, onCerrar, onGuardado }) {
   }
 
   return (
-<Modal abierto ancho titulo="Registrar compra (CU-02)" onCerrar={onCerrar}>
+    <Modal abierto ancho titulo="Registrar compra" onCerrar={onCerrar}>
       {error && <div className="alerta alerta--error">{error}</div>}
       <form onSubmit={manejarSubmit} className="formulario">
         <div className="fila-campos">

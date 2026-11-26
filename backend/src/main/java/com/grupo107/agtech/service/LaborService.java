@@ -221,7 +221,7 @@ public class LaborService {
                 && labor.getTipoLabor().requiereValidacionClimatica()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "La labor de " + labor.getTipoLabor()
-                            + " requiere validación climática previa (estado APROBADA_CLIMA, RN-01) antes de iniciarse."
+                            + " requiere validación climática previa (estado APROBADA_CLIMA) antes de iniciarse."
                             + " Sólo las labores de LABRANZA pueden iniciarse directamente desde PLANIFICADA");
         }
 

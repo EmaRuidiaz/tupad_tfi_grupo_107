@@ -78,7 +78,7 @@ function Compras() {
           <h1>Compras de Insumos</h1>
           <p className="pagina__subtitulo">
             Registro de facturas de proveedores con actualización automática de stock y precio
-            unitario (CU-02 / RF-03).
+            unitario.
           </p>
         </div>
         <div className="pagina__acciones">

@@ -48,8 +48,21 @@ export function tieneAlgunRol(...roles) {
   )
 }
 
+async function ejecutarFetch(url, options) {
+  try {
+    return await fetch(url, options)
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw err
+    }
+    throw new Error(
+      'No se pudo conectar con el servidor. Verificá tu conexión o intentá nuevamente en unos segundos.',
+    )
+  }
+}
+
 export async function login(username, password) {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+  const response = await ejecutarFetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
@@ -74,7 +87,7 @@ export async function apiFetch(path, options = {}) {
     headers.Authorization = `Bearer ${session.token}`
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await ejecutarFetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
   })

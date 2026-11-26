@@ -1,0 +1,10 @@
+.git
+frontend
+docs
+backend/target
+**/node_modules
+*.html
+*_files
+*.txt
+*.pdf
+*.md

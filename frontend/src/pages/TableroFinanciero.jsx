@@ -23,7 +23,7 @@ const OPCIONES_ALCANCE_CICLO = [
   },
   {
     valor: 'ULTIMO_CICLO',
-    etiqueta: 'Último ciclo productivo (RN-12)',
+    etiqueta: 'Último ciclo productivo',
   },
 ]
 
@@ -339,12 +339,12 @@ function TableroFinanciero() {
             <h1>Tablero Financiero y ROI</h1>
             <p className="pagina__subtitulo">
               Reporte consolidado por lote de ingresos brutos, costos históricos
-              acumulados, margen neto y retorno de inversión (HU-13 / RF-08).
+              acumulados, margen neto y retorno de inversión.
             </p>
           </div>
         </div>
         <div className="alerta alerta--advertencia" role="alert">
-          Acceso restringido: según la matriz de permisos por rol (RF-01), el
+          Acceso restringido: según la matriz de permisos por rol, el
           Tablero Financiero y las métricas de ROI están habilitados únicamente
           para los perfiles <strong>ADMIN</strong> y <strong>AGRONOMO</strong>{' '}
           (tu rol actual es <strong>{sesion?.rol || 'OPERARIO'}</strong>).
@@ -361,7 +361,7 @@ function TableroFinanciero() {
           <p className="pagina__subtitulo">
             Consolidación económica por lote: comparación de Ingresos Brutos de
             cosecha vs. Costos Totales Acumulados de labores completadas,
-            Margen Neto y Retorno de Inversión (HU-13 / RF-08 / RN-12).
+            Margen Neto y Retorno de Inversión.
           </p>
         </div>
 
@@ -612,7 +612,7 @@ function TableroFinanciero() {
                   {formatearNumero(maximoMontoEscala)}) · Modo:{' '}
                   <strong>
                     {alcanceCiclo === 'ULTIMO_CICLO'
-                      ? 'Último ciclo productivo (RN-12)'
+                      ? 'Último ciclo productivo'
                       : 'Acumulado histórico'}
                   </strong>
                   . Hacé clic en «Desglose» para inspeccionar órdenes por tipo

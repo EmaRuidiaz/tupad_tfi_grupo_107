@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:agtechdb}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:agtechdb}?sslmode=${DB_SSL_MODE:prefer}
     # Sin valores por defecto: las credenciales deben venir del entorno.
     username: ${DB_USER}
     password: ${DB_PASSWORD}

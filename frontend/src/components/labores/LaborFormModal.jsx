@@ -27,7 +27,7 @@ function obtenerIncompatibilidadAgronomica(lote, tipoLabor) {
     (estado === 'COSECHADO' || estado === 'DESCANSO') &&
     tipoLabor !== 'LABRANZA'
   ) {
-    return `El lote "${lote.nombre}" está en estado "${etiquetaEst}": sólo admite labores de Labranza (CU-03).`
+    return `El lote "${lote.nombre}" está en estado "${etiquetaEst}": sólo admite labores de Labranza.`
   }
 
   if (tipoLabor === 'SIEMBRA' && estado !== 'EN_PREPARACION') {
@@ -382,7 +382,7 @@ function LaborFormModal({
       titulo={
         labor
           ? `Editar orden de trabajo #${labor.id}`
-          : 'Programar orden de trabajo (CU-03)'
+          : 'Programar orden de trabajo'
       }
       onCerrar={onCerrar}
     >
@@ -521,7 +521,7 @@ function LaborFormModal({
             </div>
             {maquinariaSeleccionada.mantenimientoVencido && (
               <div className="texto-peligro">
-                <strong>⚠ Advertencia (RN-06):</strong> Esta máquina superó el
+                <strong>⚠ Advertencia:</strong> Esta máquina superó el
                 umbral de próximo service (
                 {formatearNumero(maquinariaSeleccionada.horasUsoActuales)} /{' '}
                 {formatearNumero(
@@ -545,7 +545,7 @@ function LaborFormModal({
             }}
           >
             <label>
-              Insumos a reservar (RN-03 / RN-07)
+              Insumos a reservar
               {superficieLoteHa > 0
                 ? ` · Superficie del lote: ${formatearNumero(superficieLoteHa)} ha`
                 : ''}
